@@ -1,0 +1,50 @@
+{
+  "items": [
+    {
+      "id": "201949755",
+      "title": "Sony WH-1000XM5",
+      "categoryId": "2520",
+      "subheading": "Casque Bluetooth",
+      "href": "https://www.idealo.fr/prix/201949755/sony-wh-1000xm5.html",
+      "offerInfo": {"formattedPrice": "217,99 €", "offerCount": 80, "usedOnly": false},
+      "type": "PRODUCT",
+      "shopInfo": {"shopId": "26800", "shopName": "Boulanger.com", "shippingCosts": "0,00 €"},
+      "rawPrice": 217.99
+    },
+    {
+      "id": "203052971",
+      "title": "Sony WF-1000XM5",
+      "categoryId": "2520",
+      "href": "https://www.idealo.fr/prix/203052971/sony-wf-1000xm5.html",
+      "offerInfo": {"formattedPrice": "179,00 €", "offerCount": 60, "usedOnly": false},
+      "type": "PRODUCT",
+      "shopInfo": {"shopName": "Amazon"},
+      "rawPrice": 179.0
+    },
+    {
+      "id": "209999001",
+      "title": "Étui de protection pour Sony WH-1000XM5",
+      "categoryId": "2520",
+      "href": "/prix/209999001/etui-sony-wh-1000xm5.html",
+      "offerInfo": {"formattedPrice": "15,99 €", "offerCount": 4, "usedOnly": false},
+      "type": "PRODUCT",
+      "shopInfo": {"shopName": "Cdiscount"},
+      "rawPrice": 15.99
+    },
+    {
+      "id": "200278049",
+      "title": "Sony WH-1000XM4",
+      "href": "https://www.idealo.fr/prix/200278049/sony-wh-1000xm4.html",
+      "offerInfo": {"formattedPrice": "199,00 €", "offerCount": 50, "usedOnly": false},
+      "type": "PRODUCT",
+      "shopInfo": {"shopName": "Fnac"},
+      "rawPrice": 199.0
+    },
+    {
+      "id": "ad-1",
+      "title": "Publicité",
+      "type": "AD"
+    }
+  ],
+  "metadata": {"query": "sony wh-1000xm5"}
+}

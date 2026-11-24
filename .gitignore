@@ -1,0 +1,43 @@
+# --- Secrets : ne JAMAIS publier ---
+.env
+.env.*
+!.env.example
+
+# --- Base d'état locale (historique, dédoublonnage, cache) ---
+state.db
+state.db-journal
+state.db-wal
+state.db-shm
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- Environnements virtuels ---
+venv/
+.venv/
+env/
+
+# --- Logs / divers ---
+logs/
+*.log
+debug_dumps/
+
+# --- Éditeurs / OS ---
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# --- Claude Code (réglages locaux) ---
+.claude/settings.local.json

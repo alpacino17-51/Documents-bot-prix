@@ -1,0 +1,45 @@
+{
+  "kind": "Listing",
+  "data": {
+    "after": "t3_1abc999",
+    "children": [
+      {
+        "kind": "t3",
+        "data": {
+          "id": "1abc001",
+          "title": "Rules & weekly thread",
+          "stickied": true,
+          "url": "https://www.reddit.com/r/GameDeals/comments/1abc001/rules/",
+          "permalink": "/r/GameDeals/comments/1abc001/rules/",
+          "created_utc": 1795500000
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "id": "1abc002",
+          "title": "[Amazon.de] Logitech G Pro X Superlight 2 - 49,99€ (price error? was 159,99€)",
+          "stickied": false,
+          "url": "https://www.amazon.de/dp/B0CC5GSSCT?tag=xyz-21",
+          "url_overridden_by_dest": "https://www.amazon.de/dp/B0CC5GSSCT?tag=xyz-21",
+          "permalink": "/r/BuildAPCSalesUK/comments/1abc002/amazonde_logitech_g_pro_x_superlight_2/",
+          "selftext": "",
+          "created_utc": 1795600000,
+          "link_flair_text": "Mouse"
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "id": "1abc003",
+          "title": "Discussion: best SSD under £50?",
+          "stickied": false,
+          "url": "https://www.reddit.com/r/BuildAPCSalesUK/comments/1abc003/discussion/",
+          "permalink": "/r/BuildAPCSalesUK/comments/1abc003/discussion/",
+          "selftext": "Looking for advice",
+          "created_utc": 1795600100
+        }
+      }
+    ]
+  }
+}

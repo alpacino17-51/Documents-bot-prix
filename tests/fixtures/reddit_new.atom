@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
+  <title>newest submissions : GameDeals</title>
+  <entry>
+    <author><name>/u/dealhunter</name></author>
+    <category term="GameDeals" label="r/GameDeals"/>
+    <content type="html">&lt;table&gt;&lt;tr&gt;&lt;td&gt; submitted by &lt;a href="https://www.reddit.com/user/dealhunter"&gt; /u/dealhunter &lt;/a&gt; &lt;br/&gt; &lt;span&gt;&lt;a href="https://www.fanatical.com/fr/game/elden-ring"&gt;[link]&lt;/a&gt;&lt;/span&gt; &lt;span&gt;&lt;a href="https://www.reddit.com/r/GameDeals/comments/1xyz001/fanatical_elden_ring/"&gt;[comments]&lt;/a&gt;&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</content>
+    <id>t3_1xyz001</id>
+    <link href="https://www.reddit.com/r/GameDeals/comments/1xyz001/fanatical_elden_ring/"/>
+    <updated>2026-11-24T10:00:00+00:00</updated>
+    <title>[Fanatical] Elden Ring (€11.99 / 80% off)</title>
+  </entry>
+</feed>

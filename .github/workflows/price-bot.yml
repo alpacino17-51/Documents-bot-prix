@@ -1,0 +1,62 @@
+name: price-bot
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"      # toutes les 5 minutes (GitHub peut retarder les tâches planifiées)
+  workflow_dispatch: {}         # bouton « Run workflow » pour lancer à la main
+
+concurrency:
+  group: price-bot
+  cancel-in-progress: false     # un passage en cours n'est jamais annulé ; le suivant attend
+
+permissions:
+  contents: read
+  actions: write                # nécessaire uniquement pour supprimer les anciens caches state.db
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installer les dépendances
+        run: pip install -r requirements.txt
+
+      - name: Restaurer state.db (dernier état connu)
+        uses: actions/cache/restore@v4
+        with:
+          path: state.db
+          key: state-db-${{ github.run_id }}
+          restore-keys: state-db-
+
+      - name: Lancer un passage du bot
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+          EXTRA_HEADERS_JSON: ${{ secrets.EXTRA_HEADERS_JSON }}
+        run: python main.py --once
+
+      - name: Sauvegarder state.db (même si le passage a échoué)
+        if: always() && hashFiles('state.db') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: state.db
+          key: state-db-${{ github.run_id }}
+
+      - name: Nettoyer les anciens caches state.db (garde les 5 plus récents)
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh cache list --key state-db- --sort created_at --order desc --limit 100 --json id --jq '.[5:][].id' \
+            | xargs -r -n1 gh cache delete

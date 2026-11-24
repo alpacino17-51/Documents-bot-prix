@@ -1,0 +1,263 @@
+{
+  "general": {
+    "max_price_eur": 200,
+    "allow_unknown_price": false,
+    "max_deal_age_hours": 48,
+    "max_alerts_per_run": 15,
+    "silent_first_run": true,
+    "loop_interval_seconds": 120,
+    "log_level": "INFO",
+    "db_path": "state.db",
+    "fx_to_eur": {
+      "EUR": 1.0,
+      "GBP": 1.17,
+      "USD": 0.92,
+      "CHF": 1.06,
+      "PLN": 0.23,
+      "SEK": 0.088
+    }
+  },
+
+  "http": {
+    "impersonate": "chrome",
+    "timeout_seconds": 25,
+    "max_retries": 2,
+    "min_delay_seconds": 2.0,
+    "max_delay_seconds": 4.5,
+    "accept_language": "fr-FR,fr;q=0.9,en;q=0.7"
+  },
+
+  "sources": {
+    "dealabs": {
+      "enabled": true,
+      "min_interval_minutes": 0,
+      "base_url": "https://www.dealabs.com",
+      "deal_path": "bons-plans",
+      "visit_path": "visit/homenew",
+      "country": "FR",
+      "fetch_order": ["json", "rss", "html"],
+      "feeds": [
+        {
+          "name": "nouveaux",
+          "page_url": "https://www.dealabs.com/nouveaux",
+          "rss_url": "https://www.dealabs.com/rss/nouveaux",
+          "price_error_context": false
+        },
+        {
+          "name": "hot",
+          "page_url": "https://www.dealabs.com/hot",
+          "rss_url": "https://www.dealabs.com/rss/hot",
+          "price_error_context": false
+        },
+        {
+          "name": "groupe erreur de prix",
+          "page_url": "https://www.dealabs.com/groupe/erreur-de-prix",
+          "rss_url": "https://www.dealabs.com/rss/groupe/erreur-de-prix",
+          "price_error_context": true
+        }
+      ],
+      "topics_enabled": true,
+      "topics_min_interval_minutes": 15,
+      "topics": [
+        {
+          "name": "[SUIVI] Erreurs de prix",
+          "url": "https://www.dealabs.com/discussions/suivi-erreurs-de-prix-1063390"
+        },
+        {
+          "name": "Le topic des erreurs de prix",
+          "url": "https://www.dealabs.com/discussions/le-topic-des-erreurs-de-prix-1056379"
+        }
+      ]
+    },
+
+    "pepper_eu": {
+      "enabled": true,
+      "min_interval_minutes": 0,
+      "fetch_order": ["json", "rss", "html"],
+      "sites": [
+        {
+          "name": "mydealz",
+          "enabled": true,
+          "country": "DE",
+          "base_url": "https://www.mydealz.de",
+          "deal_path": "deals",
+          "visit_path": "visit/homenew",
+          "currency": "EUR",
+          "page_urls": ["https://www.mydealz.de/new", "https://www.mydealz.de/trending"],
+          "rss_urls": ["https://www.mydealz.de/rss/new", "https://www.mydealz.de/rss/hot"]
+        },
+        {
+          "name": "hotukdeals",
+          "enabled": true,
+          "country": "UK",
+          "base_url": "https://www.hotukdeals.com",
+          "deal_path": "deals",
+          "visit_path": "visit/homenew",
+          "currency": "GBP",
+          "page_urls": ["https://www.hotukdeals.com/new", "https://www.hotukdeals.com/hot"],
+          "rss_urls": ["https://www.hotukdeals.com/rss/new", "https://www.hotukdeals.com/rss/hot"]
+        },
+        {
+          "name": "chollometro",
+          "enabled": true,
+          "country": "ES",
+          "base_url": "https://www.chollometro.com",
+          "deal_path": "ofertas",
+          "visit_path": "visit/homenew",
+          "currency": "EUR",
+          "page_urls": ["https://www.chollometro.com/nuevos", "https://www.chollometro.com/populares"],
+          "rss_urls": ["https://www.chollometro.com/rss/new", "https://www.chollometro.com/rss/hot"]
+        },
+        {
+          "name": "pepper.it",
+          "enabled": false,
+          "_note": "pepper.it a fermé le 14/08/2025 (la page d'accueil l'annonce). Laisse désactivé sauf réouverture.",
+          "country": "IT",
+          "base_url": "https://www.pepper.it",
+          "deal_path": "offerte",
+          "visit_path": "visit/homenew",
+          "currency": "EUR",
+          "page_urls": ["https://www.pepper.it/nuovi", "https://www.pepper.it/hot"],
+          "rss_urls": ["https://www.pepper.it/rss/new", "https://www.pepper.it/rss/hot"]
+        }
+      ],
+      "france_delivery": {
+        "allowed_link_hosts": [
+          "amazon.fr", "amazon.de", "amazon.it", "amazon.es", "amazon.nl", "amazon.com.be"
+        ],
+        "amazon_merchant_patterns": ["amazon"],
+        "excluded_link_hosts": ["amazon.co.uk", "amazon.com"],
+        "ship_to_france_keywords": [
+          "livraison en france", "livre en france", "ships to france", "delivers to france",
+          "eu delivery", "europe delivery", "versand nach frankreich", "lieferung nach frankreich",
+          "envio a francia", "envío a francia", "spedizione in francia"
+        ]
+      }
+    },
+
+    "camelcamelcamel": {
+      "enabled": true,
+      "min_interval_minutes": 10,
+      "locales": ["fr", "de", "it", "es"],
+      "feed_url_template": "https://{locale}.camelcamelcamel.com/top_drops/feed",
+      "page_url_template": "https://{locale}.camelcamelcamel.com/top_drops",
+      "product_url_template": "https://{locale}.camelcamelcamel.com/product/{asin}",
+      "fetch_order": ["rss", "html"],
+      "history_lookup_enabled": true
+    },
+
+    "reddit": {
+      "enabled": false,
+      "min_interval_minutes": 10,
+      "subreddits": ["GameDeals", "BuildAPCSalesUK", "frugalmalefashion"],
+      "limit": 40,
+      "user_agent": "windows:price-watch-personal:v1.0 (personal deal alerts)",
+      "fetch_order": ["json", "rss", "html"]
+    },
+
+    "idealo": {
+      "enabled": true,
+      "base_url": "https://www.idealo.fr",
+      "site_id": 4,
+      "search_url_template": "https://www.idealo.fr/prechcat.html?q={query}",
+      "history_api_enabled": true,
+      "history_url_template": "https://www.idealo.fr/price-chart/sites/{site_id}/products/{product_id}/history?period={period}",
+      "history_period": "P3M",
+      "cache_hours": 12,
+      "min_title_similarity": 0.55,
+      "max_candidates": 8
+    }
+  },
+
+  "filters": {
+    "category_include_keywords": [
+      "high-tech", "high tech", "informatique", "telephonie", "audiovisuel", "photo", "image et son",
+      "consoles", "jeux video", "gaming", "mode", "vetements", "chaussures", "sport", "sports",
+      "elektronik", "computer", "telefon", "fashion", "electronics", "computing", "phones", "video games",
+      "electronica", "informatica", "videojuegos", "moda", "deportes", "elettronica", "videogiochi",
+      "abbigliamento", "plein air", "outdoor"
+    ],
+    "title_category_keywords": [
+      "ssd", "disque dur", "hdd", "nvme", "ecran", "moniteur", "monitor", "pc portable", "laptop", "notebook",
+      "ordinateur", "macbook", "ipad", "iphone", "tablette", "tablet", "smartphone", "casque", "ecouteurs",
+      "earbuds", "airpods", "enceinte", "barre de son", "tv", "televiseur", "oled", "qled", "rtx", "radeon",
+      "processeur", "ryzen", "intel core", "carte graphique", "ddr4", "ddr5", "clavier", "souris", "routeur",
+      "wifi", "nas", "imprimante", "appareil photo", "objectif", "drone", "montre connectee", "smartwatch",
+      "chargeur", "powerbank", "webcam", "microsd", "micro sd", "cle usb", "switch 2", "nintendo switch", "ps5",
+      "playstation", "xbox", "steam deck", "manette", "jeu video", "console",
+      "kopfhorer", "fernseher", "laufschuhe", "headphones", "auriculares", "portatil", "cuffie",
+      "sneakers", "baskets", "chaussures", "running", "t-shirt", "sweat", "hoodie", "veste", "doudoune",
+      "jean", "pantalon", "legging", "velo", "fitness", "trottinette", "raquette", "survetement",
+      "sac a dos", "zapatillas", "scarpe", "schuhe"
+    ],
+    "resale_brands": [
+      "Lego", "Apple", "Dyson", "Pokémon", "Nintendo", "Sony", "DJI", "GoPro", "Garmin", "Bose",
+      "Nike Jordan", "Nike Dunk", "New Balance", "Le Creuset", "KitchenAid", "Thermomix"
+    ],
+    "fashion_category_keywords": [
+      "mode", "vetements", "chaussures", "fashion", "moda", "abbigliamento", "bekleidung", "accessoires de mode"
+    ],
+    "fashion_keywords": [
+      "t-shirt", "tee-shirt", "chemise", "pull", "sweat", "hoodie", "veste", "manteau", "doudoune", "parka",
+      "jean", "jeans", "pantalon", "short", "jupe", "robe", "legging", "chaussettes", "chaussures", "sneakers",
+      "baskets", "basket", "bottes", "bottines", "sandales", "claquettes", "mocassins", "casquette", "bonnet",
+      "echarpe", "survetement", "jogging", "boxer", "soutien-gorge", "pointure", "jordan", "dunk", "new balance",
+      "jacke", "hose", "schuhe", "zapatillas", "camiseta", "scarpe", "giacca", "trainers", "jacket"
+    ],
+    "fashion_size_patterns": [
+      "\\b(taille|size|grosse|größe|talla|taglia)\\b",
+      "\\b(xxs|xs|xxl|xxxl|3xl)\\b",
+      "\\beu ?(3[5-9]|4[0-9])([.,]5| 1/3| 2/3)?\\b"
+    ],
+    "exclude_title_keywords": [
+      "coque", "cover", "funda", "custodia", "hulle", "handyhulle", "verre trempe", "protection ecran",
+      "protege ecran", "screen protector", "film protecteur", "panzerglas", "pellicola", "protector de pantalla"
+    ],
+    "accessory_keywords": [
+      "coque", "etui", "housse", "case", "cover", "protection", "verre trempe", "film", "cable",
+      "adaptateur", "support", "bracelet", "dock", "skin", "sacoche", "pochette", "replacement",
+      "remplacement", "compatible", "ersatz", "hulle", "funda", "custodia", "piece detachee", "recharge"
+    ]
+  },
+
+  "triggers": {
+    "keywords": [
+      "erreur de prix", "erreur prix", "prix errone", "prix erroné", "erreur d'etiquetage", "erreur d'étiquetage",
+      "bug", "glitch", "bug de prix",
+      "preisfehler", "fehlerpreis", "preis-fehler", "preisbug",
+      "price error", "pricing error", "price mistake", "price glitch",
+      "error de precio", "error en el precio", "precio erroneo", "precio erróneo",
+      "errore di prezzo", "errore prezzo", "prezzo errato", "bug prezzo"
+    ],
+    "negation_patterns": [
+      "pas (une|d'|de) erreur de prix", "pas un bug", "not a price error", "no price error",
+      "kein preisfehler", "no es un error", "non e un errore"
+    ],
+    "min_displayed_discount_pct": 70,
+    "price_error_context_counts_as_keyword": true,
+    "velocity": {
+      "enabled": true,
+      "threshold_deg_per_min": 8.0,
+      "min_window_minutes": 4,
+      "max_window_minutes": 60,
+      "min_temperature": 60,
+      "use_publication_time": true
+    }
+  },
+
+  "verification": {
+    "true_deal_min_below_median_pct": 35,
+    "inflated_tolerance_pct": 5,
+    "inflated_min_real_discount_pct": 30,
+    "strong_displayed_discount_pct": 50,
+    "require_elsewhere_for_true_deal": false,
+    "min_local_history_points": 5,
+    "history_priority_amazon": ["camel", "idealo", "local"],
+    "history_priority_other": ["idealo", "local"]
+  },
+
+  "telegram": {
+    "disable_web_page_preview": false,
+    "send_delay_seconds": 1.2
+  }
+}

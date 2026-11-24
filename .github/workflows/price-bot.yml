@@ -19,10 +19,10 @@ jobs:
     timeout-minutes: 12
     steps:
       - name: Récupérer le code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Installer Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -31,7 +31,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Restaurer state.db (dernier état connu)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: state.db
           key: state-db-${{ github.run_id }}
@@ -47,7 +47,7 @@ jobs:
 
       - name: Sauvegarder state.db (même si le passage a échoué)
         if: always() && hashFiles('state.db') != ''
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: state.db
           key: state-db-${{ github.run_id }}

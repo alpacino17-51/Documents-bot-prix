@@ -83,6 +83,25 @@ Le JSON embarqué des pages Pepper est préféré au RSS car c'est le seul à co
 
 ---
 
+## 2 bis. Catalogue de sites (`sites_catalog`)
+
+Les sites supplémentaires ne demandent pas de nouveau fichier Python : chaque entrée de `sites_catalog.sites`
+choisit un **moteur** réutilisable (`sources/catalog.py`).
+
+| Moteur | Fichier | Sites configurés |
+|---|---|---|
+| `idealo_deals` | `sources/comparators_drops.py` | idealo.de / .es / .it (tri nouveauté + réduction, ≥ 50 %, ≤ 200 €), filtré sur les boutiques qui livrent la France (`ships_to_france_shops`) |
+| `geizhals_deals` | `sources/comparators_drops.py` | geizhals.eu — **403 Cloudflare** depuis la France, pause automatique |
+| `tradeinn` | `sources/tradeinn.py` | runnerinn, bikeinn, trekkinn, snowinn, waveinn, dressinn… via les bons plans Idealo (le site lui-même n'expose ses produits que via un moteur de recherche privé protégé par clé, non utilisé) |
+| `galaxus` | `sources/galaxus.py` | galaxus.fr : produits remisés présents dans `__NEXT_DATA__` + offres Galaxus vues sur Idealo |
+| `shopify` | `sources/sneakers_generic.py` | asphaltgold, overkillshop, sneakersnstuff, size.co.uk (£ → €, plafond UK 150 €) |
+| `hypernova` | `sources/sneakers_generic.py` | footshop.fr |
+| `cards` | `sources/sneakers_generic.py` | kickz.com |
+| `jsonld` | `sources/sneakers_generic.py` | snipes, bstn, sivasdescalzo, endclothing — **désactivés** (produits chargés en JavaScript ou URL promo introuvable) |
+
+Chaque site a son `enabled`, son `min_interval_minutes` et peut avoir son propre `min_displayed_discount_pct`.
+Les deals déclenchés sont vérifiés par ordre de priorité : sources communautaires d'abord, puis plus forte remise.
+
 ## 3 bis. Vérification stricte anti « faux bons plans »
 
 Pour chaque deal déclenché (toutes catégories, mode comprise) :
@@ -99,7 +118,8 @@ Pour chaque deal déclenché (toutes catégories, mode comprise) :
    considérée comme non concluante (pas d'exclusivité prononcée).
 4. **Verdict** : ✅ exige marque vérifiée/réelle + ≥ 1 autre marchand (ou prix officiel) + prix ≥ 35 % sous une
    médiane **de marché** (jamais un prix barré marchand) ou ≥ 30 % sous le prix officiel, et moins cher que le plus
-   bas prix connu ailleurs.
+   bas prix connu ailleurs. Une référence **approximative** (prix habituel Idealo, moyenne CamelCamelCamel) doit en
+   plus être confirmée par le prix officiel : sinon ❓, ou report si la recherche du prix officiel n'a pas pu se faire.
 5. **Envoi Telegram** (`notifications`) : ⚠️ jamais envoyés (enregistrés + loggués) ; ❓ envoyés seulement pour
    les sources communautaires (Dealabs, Pepper…). Les liens Pepper `/visit/...` sont résolus vers l'URL directe du
    produit (paramètres d'affiliation retirés) ; « Lien marchand » apparaît en premier.

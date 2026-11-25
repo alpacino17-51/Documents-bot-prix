@@ -257,6 +257,7 @@ def test_blocked_source_is_paused_and_new_source_bootstraps(cfg, tmp_path):
             return True
 
     c = copy.deepcopy(cfg)
+    c["sites_catalog"]["sites"] = []
     for name in ("dealabs", "pepper_eu", "camelcamelcamel", "reddit", "decathlon", "boulanger", "idealo_drops"):
         c["sources"][name]["enabled"] = False
     c["sources"]["idealo"]["enabled"] = False

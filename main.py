@@ -30,6 +30,8 @@ from models import VERDICT_INFLATED, VERDICT_TRUE, VERDICT_UNVERIFIED, Alert, De
 from notifier import ConsoleNotifier, TelegramNotifier
 from settings import ROOT, load_config, load_dotenv_if_present, load_secrets
 from sources import FEED_SOURCES, LEGACY_SOURCES, CamelSource, IdealoSource
+from sources.catalog import build_catalog_sources
+from sources.comparators_drops import clear_cache as clear_idealo_deals_cache
 from utils import (clean_url, extract_asin, extract_ean, extract_mpn, normalize_url, title_hash, to_eur,
                    url_host)
 from verifier import Verifier
@@ -87,6 +89,11 @@ class Bot:
             src = cls(src_cfg.get(name, {}), self.http, general)
             src.db = db
             self.sources.append(src)
+        # sites pilotés par `sites_catalog` (moteurs réutilisables)
+        for src in build_catalog_sources(cfg, self.http, general, reserved=set(FEED_SOURCES) | {"idealo", "idealo_de"}):
+            src.db = db
+            self.sources.append(src)
+        self.source_cfgs = {s.name: s.cfg for s in self.sources}
         self.camel = next((s for s in self.sources if isinstance(s, CamelSource)), None)
         if hasattr(self.http, "cooldown_store"):
             self.http.cooldown_store = db          # pause automatique par domaine, persistée dans state.db
@@ -163,7 +170,7 @@ class Bot:
 
     def _triggers_for(self, deal: Deal, triggers_cfg: dict) -> dict:
         """Seuils propres à une source (facultatif) : sources.<nom>.min_displayed_discount_pct / resale_brand_..."""
-        src_cfg = self.cfg.get("sources", {}).get(deal.origin, {}) if deal.origin else {}
+        src_cfg = self.source_cfgs.get(deal.origin, {}) if deal.origin else {}
         overrides = {k: src_cfg[k] for k in ("min_displayed_discount_pct", "resale_brand_min_discount_pct")
                      if k in src_cfg}
         return {**triggers_cfg, **overrides} if overrides else triggers_cfg
@@ -184,12 +191,14 @@ class Bot:
             self.http.reset_run()
         self.web.reset_run()
         self.verifier.reset_run()
+        clear_idealo_deals_cache()
         deals = self.collect()
         now = time.time()
         stats = {"deals": len(deals), "triggered": 0, "duplicates": 0, "sent": 0, "bootstrap": 0, "failed": 0,
                  "deferred": 0, "filtered": 0, "verdicts": {}}
         seen_this_run: set[str] = set()
         triggered_by: dict[str, int] = {}
+        candidates: list[tuple] = []
 
         for deal in deals:
             deal.price_eur = to_eur(deal.price, deal.currency, fx)
@@ -237,12 +246,20 @@ class Bot:
                                      price_eur=deal.price_eur, verdict="bootstrap", sent=False)
                 stats["bootstrap"] += 1
                 continue
+            candidates.append((deal, keys, triggers, velocity))
+
+        # vérification par ordre de priorité : erreurs de prix communautaires (urgentes) d'abord,
+        # puis plus forte réduction affichée -> le budget de recherche web sert d'abord aux meilleurs deals
+        community = set(self.cfg.get("notifications", {}).get(
+            "community_sources", ["dealabs", "pepper_eu", "reddit", "camelcamelcamel"]))
+        candidates.sort(key=lambda c: (c[0].origin not in community, -(c[0].displayed_discount_pct or 0)))
+        for deal, keys, triggers, velocity in candidates:
             if stats["sent"] >= max_alerts:
                 if not stats.get("capped"):
                     log.warning("Limite de %d alertes atteinte pour ce passage : le reste attendra le suivant",
                                 max_alerts)
                 stats["capped"] = 1
-                continue        # on continue la boucle pour enregistrer les températures
+                break
 
             log.info("Déclenché [%s] %s — %s", deal.source, deal.title[:90], " | ".join(triggers))
             self.resolve_merchant_link(deal)

@@ -356,6 +356,63 @@
     }
   },
 
+  "sites_catalog": {
+    "_note": "Un site = une entrée. `engine` choisit le moteur : idealo_deals, geizhals_deals, tradeinn, galaxus, shopify, hypernova, jsonld, cards. Mettre enabled à false pour couper un site.",
+    "defaults": {"enabled": true, "min_interval_minutes": 15, "currency": "EUR", "country": "FR"},
+    "sites": [
+      {"id": "idealo_de_drops", "label": "Idealo DE bons plans", "engine": "idealo_deals", "idealo_country": "de",
+       "country": "DE", "min_interval_minutes": 10, "discount_from": 50, "price_to": 200,
+       "sorts": ["CREATION_DATE_DESC", "DISCOUNT_DESC"],
+       "ships_to_france_shops": ["amazon", "pccomponentes", "coolshop", "mandmdirect", "inn.com", "tradeinn",
+                                 "notebooksbilliger", "alternate"]},
+      {"id": "idealo_es_drops", "label": "Idealo ES bons plans", "engine": "idealo_deals", "idealo_country": "es",
+       "country": "ES", "min_interval_minutes": 10, "discount_from": 50, "price_to": 200,
+       "sorts": ["CREATION_DATE_DESC", "DISCOUNT_DESC"],
+       "ships_to_france_shops": ["amazon", "pccomponentes", "inn.com", "tradeinn", "esdemarca", "atmosfera sport"]},
+      {"id": "idealo_it_drops", "label": "Idealo IT bons plans", "engine": "idealo_deals", "idealo_country": "it",
+       "country": "IT", "min_interval_minutes": 10, "discount_from": 50, "price_to": 200,
+       "sorts": ["CREATION_DATE_DESC", "DISCOUNT_DESC"],
+       "ships_to_france_shops": ["amazon", "esdemarca", "inn.com", "tradeinn"]},
+      {"id": "geizhals_deals", "label": "Geizhals deals", "engine": "geizhals_deals", "country": "AT",
+       "min_interval_minutes": 30, "page_urls": ["https://geizhals.eu/?deals"],
+       "_note": "geizhals.eu répond 403 depuis la France : la source se met en pause automatiquement."},
+
+      {"id": "tradeinn", "label": "Tradeinn (réseau)", "engine": "tradeinn", "min_interval_minutes": 15,
+       "idealo_countries": ["fr", "es", "de", "it"], "discount_from": 40, "price_to": 200,
+       "shops": ["runnerinn", "bikeinn", "trekkinn", "snowinn", "waveinn", "dressinn", "swiminn", "smashinn",
+                 "goalinn", "diveinn", "motardinn", "xtremeinn", "outletinn", "kidinn", "techinn", "tradeinn"],
+       "page_urls": []},
+
+      {"id": "galaxus", "label": "Galaxus", "engine": "galaxus", "base_url": "https://www.galaxus.fr",
+       "min_interval_minutes": 15, "page_urls": ["https://www.galaxus.fr/fr"],
+       "idealo_shop_patterns": ["galaxus"], "idealo_countries": ["fr"]},
+
+      {"id": "asphaltgold", "label": "Asphaltgold", "engine": "shopify", "base_url": "https://www.asphaltgold.com",
+       "collection": "sale", "pages": 2, "country": "DE"},
+      {"id": "overkillshop", "label": "Overkill", "engine": "shopify", "base_url": "https://www.overkillshop.com",
+       "collection": "sale", "pages": 2, "country": "DE"},
+      {"id": "sneakersnstuff", "label": "Sneakersnstuff", "engine": "shopify",
+       "base_url": "https://www.sneakersnstuff.com", "collection": "sale", "pages": 2, "country": "SE"},
+      {"id": "size_uk", "label": "size?", "engine": "shopify", "base_url": "https://www.size.co.uk",
+       "collection": "sale", "pages": 2, "country": "UK", "currency": "GBP"},
+      {"id": "footshop", "label": "Footshop", "engine": "hypernova", "base_url": "https://www.footshop.fr",
+       "path_prefix": "/fr/", "page_urls": ["https://www.footshop.fr/fr/5-sale", "https://www.footshop.fr/fr/5-sale?page=2"]},
+      {"id": "kickz", "label": "Kickz", "engine": "cards", "base_url": "https://www.kickz.com",
+       "link_contains": "/p/", "country": "DE", "page_urls": ["https://www.kickz.com/fr-FR/c/sale"]},
+      {"id": "snipes", "label": "Snipes", "engine": "jsonld", "enabled": false, "base_url": "https://www.snipes.com",
+       "page_urls": ["https://www.snipes.com/fr-fr/c/promo-660"],
+       "_note": "Liste produits chargée par l'application Angular (aucun produit dans le HTML) : désactivé."},
+      {"id": "bstn", "label": "BSTN", "engine": "jsonld", "enabled": false, "base_url": "https://www.bstn.com",
+       "page_urls": [], "_note": "Aucune URL de page promo publique valide trouvée (404) : à compléter puis activer."},
+      {"id": "sivasdescalzo", "label": "SVD", "engine": "jsonld", "enabled": false,
+       "base_url": "https://www.sivasdescalzo.com", "page_urls": [],
+       "_note": "URL promo introuvable (404) et pas de JSON Shopify : à compléter puis activer."},
+      {"id": "endclothing", "label": "END.", "engine": "jsonld", "enabled": false, "country": "UK", "currency": "GBP",
+       "base_url": "https://www.endclothing.com", "page_urls": [],
+       "_note": "URL soldes introuvable (404) : à compléter puis activer. Plafond UK 150 € appliqué automatiquement."}
+    ]
+  },
+
   "filters": {
     "category_include_keywords": [
       "high-tech", "high tech", "informatique", "telephonie", "audiovisuel", "photo", "image et son",

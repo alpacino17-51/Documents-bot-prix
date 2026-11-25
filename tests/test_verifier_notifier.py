@@ -26,6 +26,22 @@ def test_true_deal_never_from_merchant_reference_only():
     assert verdict != VERDICT_TRUE
 
 
+def test_approximate_reference_needs_official_price():
+    # cas réel : sachet LEGO 30370, « prix habituel Idealo » 179,77 € gonflé par des revendeurs
+    lego = {"median_90": 179.77}
+    v1, _, notes = compute_verdict(23.37, 179.77, 87.0, lego, 39.99, "otto.de", V, others=26,
+                                   comparison_complete=True, history_approx=True)
+    assert v1 == VERDICT_UNVERIFIED and any("approximative" in n for n in notes)
+    # le prix officiel (4,99 €) révèle que ce n'est pas une affaire
+    v2, _, _ = compute_verdict(23.37, 179.77, 87.0, lego, 39.99, "otto.de", V, others=26,
+                               comparison_complete=True, history_approx=True, official_price=4.99)
+    assert v2 == VERDICT_INFLATED
+    # référence approximative confirmée par un prix officiel élevé -> ✅
+    v3, _, _ = compute_verdict(121.99, 717.59, 83.0, {"median_90": 717.59}, 689.9, "pixmania", V, others=20,
+                               comparison_complete=True, history_approx=True, official_price=649.0)
+    assert v3 == VERDICT_TRUE
+
+
 def test_true_deal_from_official_price():
     verdict, _, _ = compute_verdict(60.0, 199.0, 69.8, None, 90.0, "Fnac", V, others=1, official_price=120.0)
     assert verdict == VERDICT_TRUE                  # 50 % sous le prix officiel et moins cher que partout

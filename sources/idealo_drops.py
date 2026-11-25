@@ -37,7 +37,8 @@ def items_from_html(html: str) -> list[dict]:
         return []
 
 
-def item_to_deal(it: dict, base_url: str = BASE) -> Optional[Deal]:
+def item_to_deal(it: dict, base_url: str = BASE, source: str = "idealo-drops",
+                 country: str = "FR") -> Optional[Deal]:
     if it.get("type") not in (None, "PRODUCT"):
         return None
     offer = it.get("offerInfo") or {}
@@ -49,7 +50,7 @@ def item_to_deal(it: dict, base_url: str = BASE) -> Optional[Deal]:
     href = idealo_url(it.get("href") or "", base_url) or offer.get("leadoutHref") or ""
     usual = round(price / (1 - saving / 100), 2) if price and saving and 0 < saving < 100 else None
     deal = make_deal(
-        "idealo-drops", shop or "Idealo", it.get("title", ""), href,
+        source, shop or "Idealo", it.get("title", ""), href,
         float(price) if price is not None else None, usual, float(saving) if saving else None,
         source_id=str(it.get("id", "")), category_hint=it.get("subheading", ""),
         link_host=shop.lower() if re.fullmatch(r"[a-z0-9-]+(\.[a-z]{2,})+", shop.lower()) else "",
@@ -59,6 +60,7 @@ def item_to_deal(it: dict, base_url: str = BASE) -> Optional[Deal]:
     )
     if deal:
         deal.merchant_url = offer.get("leadoutHref") or deal.url     # lien direct vers l'offre du marchand
+        deal.site_country = country
     return deal
 
 

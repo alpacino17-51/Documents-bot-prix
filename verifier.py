@@ -34,7 +34,8 @@ def compute_verdict(price: float, original: Optional[float], displayed_disc: Opt
                     history: Optional[dict], lowest_elsewhere: Optional[float], lowest_shop: str,
                     vcfg: dict, *, brand_status: str = VERIFIED, others: Optional[int] = None,
                     comparison_complete: bool = False, official_price: Optional[float] = None,
-                    history_eligible: bool = True) -> tuple[str, Optional[float], list[str]]:
+                    history_eligible: bool = True, history_approx: bool = False
+                    ) -> tuple[str, Optional[float], list[str]]:
     """Verdict strict.
 
     ⚠️ : marque bloquée / introuvable ; vendu exclusivement sur le site source ; prix barré > prix officiel (+10 %)
@@ -85,7 +86,12 @@ def compute_verdict(price: float, original: Optional[float], displayed_disc: Opt
     brand_ok = brand_status in (VERIFIED, REAL)
     market_ok = (others or 0) >= 1 or official_price is not None
     # ✅ exige une référence réelle ET d'être moins cher que le plus bas prix connu ailleurs
-    median_ok = real is not None and history_eligible and real >= true_min and cheaper_than_market
+    # une référence approximative (prix habituel comparateur, moyenne camel) ne suffit pas seule pour ✅ :
+    # elle peut être gonflée par des revendeurs (ex. sets LEGO retirés) -> il faut aussi le prix officiel
+    median_ok = (real is not None and history_eligible and real >= true_min and cheaper_than_market
+                 and (not history_approx or official_price is not None))
+    approx_only = (real is not None and history_eligible and real >= true_min and cheaper_than_market
+                   and history_approx and official_price is None)
     official_ok = bool(official_price and price <= official_price * (1 - official_min / 100)) and elsewhere_ok
     ref_ok = median_ok or official_ok
 
@@ -112,6 +118,8 @@ def compute_verdict(price: float, original: Optional[float], displayed_disc: Opt
         notes.append("Marque non vérifiable pour l'instant")
     elif not market_ok:
         notes.append("Aucun autre marchand ni prix officiel confirmé")
+    elif approx_only:
+        notes.append("Référence de prix approximative : confirmation par le prix officiel nécessaire")
     elif real is not None and lowest_elsewhere is None:
         notes.append("Prix des autres marchands inconnu : impossible de confirmer qu'il est le plus bas")
     else:
@@ -282,11 +290,16 @@ class Verifier:
             v.skipped_idealo_reason = "aucune correspondance fiable sur Idealo"
 
         # Étape B — prix sur le site officiel
+        official_unavailable = False
         if binfo.trusted:
+            web_ok = self.web is None or self.web.available
             domain = binfo.official_domain or self.brand_checker.find_official_domain(binfo)
             official = self.official.find(deal, domain, binfo.name) if domain else None
             if official:
                 v.official_price, v.official_url = official["price"], official["url"]
+            # recherche impossible (budget / blocage) : domaine inconnu ou page officielle non cherchée
+            official_unavailable = official is None and (not web_ok or getattr(self.official, "last_unavailable", False)
+                                                         or (not domain and not web_ok))
 
         # Étape D — historique puis verdict
         chosen_name, chosen = self._choose_history(deal, idealo_res)
@@ -303,7 +316,11 @@ class Verifier:
             price, deal.original_price_eur, deal.displayed_discount_pct, chosen, v.lowest_elsewhere,
             v.lowest_elsewhere_shop, self.vcfg, brand_status=binfo.status, others=v.others_count,
             comparison_complete=bool(cmp.get("complete")), official_price=v.official_price,
-            history_eligible=chosen_name in MARKET_HISTORIES)
+            history_eligible=chosen_name in MARKET_HISTORIES, history_approx=v.history_approx)
+        if (v.verdict == VERDICT_UNVERIFIED and any(n.startswith("Référence de prix approximative") for n in notes)
+                and official_unavailable and self._defer_without_web(deal)):
+            v.deferred = True       # ✅ possible : on attend de pouvoir vérifier le prix officiel
+            return v
         v.notes.extend(notes)
         if v.history_approx and v.median_90 is not None:
             v.notes.append("Médiane approximée par la moyenne CamelCamelCamel" if chosen_name == "camel"

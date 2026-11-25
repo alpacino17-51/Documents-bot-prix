@@ -52,10 +52,12 @@ class OfficialPriceFinder:
         self.web = web
         self.db = db
         self.min_similarity = float(self.cfg.get("min_title_similarity", 0.5))
+        self.last_unavailable = False
         self.cache_hours = float(self.cfg.get("cache_hours", 24))
 
     def find(self, deal: Deal, domain: str, brand: str = "") -> Optional[dict]:
-        """{'price', 'url', 'title', 'domain'} ou None (introuvable / recherche impossible)."""
+        """{'price', 'url', 'title', 'domain'} ou None (introuvable / recherche impossible : `last_unavailable`)."""
+        self.last_unavailable = False
         if not domain or not self.cfg.get("enabled", True) or self.http is None:
             return None
         key = f"{domain}|{deal.mpn or title_hash(deal.title)}"
@@ -70,7 +72,8 @@ class OfficialPriceFinder:
         model = " ".join(w for w in model.split() if normalize_text(w) not in brand_norm.split()) or model
         results = self.web.search(f"site:{domain} {deal.mpn or model}")
         if results is None:
-            return None                       # pas de cache : on réessaiera
+            self.last_unavailable = True      # pas de cache : on réessaiera
+            return None
         found = None
         for r in [r for r in results if r["domain"].endswith(domain)][:2]:
             try:

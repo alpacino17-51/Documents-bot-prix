@@ -1,0 +1,24 @@
+{
+  "items": [
+    {"id": "301000001", "title": "Sony WH-CH720N negro", "subheading": "Auriculares Bluetooth",
+     "href": "https://www.idealo.es/precios/301000001/sony-wh-ch720n.html",
+     "offerInfo": {"usedOnly": false, "leadoutHref": "https://www.idealo.es/relocator/relocate?offerKey=a1&type=offer"},
+     "bargainInfo": {"saving": 58, "isShortTerm": true}, "type": "PRODUCT",
+     "shopInfo": {"shopName": "amazon.es"}, "rawPrice": 59.0},
+    {"id": "301000002", "title": "Shimano RC3 zapatillas carretera", "subheading": "Zapatillas de ciclismo",
+     "href": "/precios/301000002/shimano-rc3.html",
+     "offerInfo": {"usedOnly": false, "leadoutHref": "https://www.idealo.es/relocator/relocate?offerKey=b2&type=offer"},
+     "bargainInfo": {"saving": 55}, "type": "PRODUCT",
+     "shopInfo": {"shopName": "bikeinn.com (ES)"}, "rawPrice": 49.99},
+    {"id": "301000003", "title": "Lego Technic 42151 Bugatti Bolide", "subheading": "LEGO",
+     "href": "https://www.idealo.es/precios/301000003/lego-42151.html",
+     "offerInfo": {"usedOnly": false, "leadoutHref": "https://www.idealo.es/relocator/relocate?offerKey=c3&type=offer"},
+     "bargainInfo": {"saving": 52}, "type": "PRODUCT",
+     "shopInfo": {"shopName": "tulli.es"}, "rawPrice": 24.99},
+    {"id": "301000004", "title": "Vestido largo Dressinn Basics", "subheading": "Vestidos",
+     "href": "https://www.idealo.es/precios/301000004/vestido.html",
+     "offerInfo": {"usedOnly": false, "leadoutHref": "https://www.idealo.es/relocator/relocate?offerKey=d4&type=offer"},
+     "bargainInfo": {"saving": 70}, "type": "PRODUCT",
+     "shopInfo": {"shopName": "dressinn.com (ES)"}, "rawPrice": 15.0}
+  ]
+}

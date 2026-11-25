@@ -57,6 +57,7 @@ def bot_config(cfg, **sources_on):
     for name, extra in sources_on.items():
         c["sources"][name].update(extra)
     c["general"]["silent_first_run"] = False
+    c["sites_catalog"]["sites"] = []
     c["web_search"]["min_delay_seconds"] = 0
     c["comparators"]["geizhals"]["enabled"] = False
     c["sources"]["idealo_de"]["enabled"] = False

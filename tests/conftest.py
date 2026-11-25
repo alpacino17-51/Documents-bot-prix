@@ -29,13 +29,31 @@ def idealo_search_html() -> str:
     )
 
 
+def ddg_html(results: list[tuple[str, str]]) -> str:
+    """Page de résultats DuckDuckGo HTML (liens de redirection `uddg=`), comme html.duckduckgo.com."""
+    from urllib.parse import quote
+    blocks = []
+    for url, title in results:
+        blocks.append(
+            '<div class="result results_links results_links_deep web-result"><div class="links_main links_deep '
+            f'result__body"><h2 class="result__title"><a rel="nofollow" class="result__a" '
+            f'href="//duckduckgo.com/l/?uddg={quote(url, safe="")}&amp;rut=abc">{title}</a></h2>'
+            f'<a class="result__snippet" href="#">{title} — description</a></div></div>')
+    return "<html><body><div id='links' class='results'>" + "".join(blocks) + "</div></body></html>"
+
+
 class FakeHttp:
     """Remplace HttpClient : associe un fragment d'URL à une réponse (texte, dict JSON ou code d'erreur)."""
 
-    def __init__(self, routes: dict):
+    def __init__(self, routes: dict, redirects: dict | None = None):
         self.routes = routes
+        self.redirects = redirects or {}
         self.calls: list[str] = []
         self.stats = {"requests": 0, "errors": 0, "blocked": 0}
+
+    def resolve_redirect(self, url: str, timeout: float = 10.0) -> str:
+        self.calls.append("REDIRECT " + url)
+        return self.redirects.get(url, "")
 
     def _match(self, url: str):
         for fragment, response in self.routes.items():
@@ -47,6 +65,8 @@ class FakeHttp:
         self.calls.append(url)
         self.stats["requests"] += 1
         _, response = self._match(url)
+        if callable(response):                    # réponse calculée à partir de l'URL
+            response = response(url)
         if isinstance(response, int):
             raise FetchError(url, f"HTTP {response}", response)
         final_url = url

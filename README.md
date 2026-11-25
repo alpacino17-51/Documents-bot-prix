@@ -15,7 +15,11 @@ Bot_erreur_prix/
 ├── http_client.py       # client curl_cffi (empreinte Chrome), proxy/en-têtes via env, délais, nouvelles tentatives
 ├── db.py                # state.db (SQLite) : dédoublonnage, températures, cache Idealo, historique local
 ├── filters.py           # prix max, catégories, marques revente, détection mode, critères de déclenchement
-├── verifier.py          # historique 90 j / 30 j + Idealo -> verdict ✅ ⚠️ ❓
+├── verifier.py          # vérification stricte -> verdict ✅ ⚠️ ❓
+├── brand_checker.py     # marque vérifiée / distributeur / réelle / introuvable (cache 30 j)
+├── official_price.py    # prix sur le site officiel de la marque (cache 24 h)
+├── comparators.py       # idealo.fr/.de, geizhals.eu, présence web multi-marchands (cache 12 h)
+├── web_search.py        # recherche DuckDuckGo HTML (budget, cache, pause anti-robot)
 ├── notifier.py          # mise en forme HTML + envoi Telegram
 ├── models.py            # structures Deal / Verification / Alert
 ├── utils.py             # prix, URL, ASIN/EAN/MPN, similarité de titres
@@ -26,7 +30,13 @@ Bot_erreur_prix/
 │   ├── pepper_eu.py     # mydealz, hotukdeals, chollometro, pepper.it + filtre « livrable en France »
 │   ├── camel.py         # CamelCamelCamel (Top Price Drops + stats produit)
 │   ├── reddit.py        # Reddit (.json -> .rss -> old.reddit)
-│   └── idealo.py        # Idealo (recherche, fiche produit, historique)
+│   ├── idealo.py        # Idealo (recherche, fiche produit, historique) — vérification
+│   ├── idealo_drops.py  # Idealo « bons plans » (toutes enseignes, ≥ 50 %, ≤ 200 €)
+│   ├── merchant_common.py # outils communs enseignes (JSON-LD, tri par remise)
+│   ├── decathlon.py     # Decathlon deals / bons plans
+│   ├── boulanger.py     # Boulanger (pages catégories)
+│   ├── fnac.py          # Fnac (bons plans / ventes flash)
+│   └── zalando.py       # Zalando promos (tri par réduction, catégorie Mode)
 ├── tests/               # tests unitaires + fixtures HTML/JSON réalistes
 ├── config.json          # TOUS les réglages (aucun secret)
 ├── .env.example         # modèle des secrets -> copier en .env
@@ -46,6 +56,13 @@ Bot_erreur_prix/
 | pepper.it | **désactivé** : le site a fermé le 14/08/2025 |
 | CamelCamelCamel | RSS `https://{fr,de,it,es}.camelcamelcamel.com/top_drops/feed` → HTML `/top_drops` ; stats produit `/product/{ASIN}` |
 | Reddit (optionnel) | `https://www.reddit.com/r/{sub}/new.json` → `/new/.rss` → `https://old.reddit.com/r/{sub}/new/` |
+| Dealabs pages 2 | `/nouveaux?page=2` et `/groupe/erreur-de-prix?page=2` (`pages_per_feed`, option `paginate` par flux) |
+| Dealabs pages marchands | `/search?q=<enseigne>&sortBy=new` filtré sur le nom du marchand (Boulanger, Fnac, Decathlon, Zalando, Darty, Cdiscount) — `/bons-plans/<enseigne>` redirige vers une page de codes promo sans deals |
+| Idealo bons plans | API publique liée depuis `https://www.idealo.fr/bons-plans` : `…/csr/api/v2/modules/dealsResult?discountFrom=50&priceTo=200…` (repli : JSON base64 de la page). Capte Amazon, Cdiscount, Darty, Rakuten, Boulanger… |
+| Decathlon | `/deals`, `/deals?from=40&size=40`, `/deals/bons-plans` : JSON-LD puis vignettes `.product-card` (prix, prix barré, remise) |
+| Boulanger | pages liste de catégories (`/c/ecran-pc-moniteur`, `/c/console-playstation-5`…) : `tc_vars["list_products"]` (prix TTC, % remise, vendeur, EAN) + JSON-LD `ItemList` |
+| Fnac | `/Bons-plans/cl1`, `/ventes-flash` : JSON-LD puis vignettes `.Article-item` — **bloqué par DataDome** en pratique |
+| Zalando | `/promo-homme/`, `/promo-femme/`, `/promo-sport-homme/`, `/promo-sport-femme/` avec `?order=sale` (tri par réduction) ; lit aussi « Dernier prix le plus bas » (plus bas 30 j) |
 | Idealo (vérification) | `https://www.idealo.fr/prechcat.html?q=…` (résultats JSON encodés en base64 dans la page), fiche `/prix/{id}/…` (JSON-LD + offres), historique `/price-chart/sites/4/products/{id}/history?period=P3M` |
 
 Le JSON embarqué des pages Pepper est préféré au RSS car c'est le seul à contenir la **température**
@@ -65,6 +82,36 @@ Le JSON embarqué des pages Pepper est préféré au RSS car c'est le seul à co
 6. Verdict ✅ / ⚠️ / ❓ puis alerte Telegram.
 
 ---
+
+## 3 bis. Vérification stricte anti « faux bons plans »
+
+Pour chaque deal déclenché (toutes catégories, mode comprise) :
+
+1. **Marque** (`brand_checker.py`, cache 30 j dans `brand_cache`) : liste `brands.blocked_brands` → ⚠️ immédiat ;
+   `brands.verified_brands` + `resale_brands` → vérifiée ; sinon recherche web DuckDuckGo : site officiel au nom
+   exact de la marque (les sosies du type `marque-france.fr` / `-outlet` sont rejetés) ou ≥ 2 revendeurs
+   indépendants → réelle ; rien → `fake_or_exclusive` → ⚠️.
+2. **Site officiel** (`official_price.py`, cache 24 h) : `site:<domaine> <modèle>` puis lecture du prix
+   (JSON-LD / meta / prix affiché). Prix barré > prix officiel + 10 % ou promo proche du prix officiel → ⚠️.
+3. **Multi-comparateurs** (`comparators.py`, cache 12 h) : idealo.fr, idealo.de en secours, geizhals.eu
+   (High-Tech), puis recherche web multi-marchands. **0 autre marchand + contrôles complets + pas de prix officiel
+   → ⚠️ vendu exclusivement sur le site source.** Une recherche qui ne retrouve le produit nulle part est
+   considérée comme non concluante (pas d'exclusivité prononcée).
+4. **Verdict** : ✅ exige marque vérifiée/réelle + ≥ 1 autre marchand (ou prix officiel) + prix ≥ 35 % sous une
+   médiane **de marché** (jamais un prix barré marchand) ou ≥ 30 % sous le prix officiel, et moins cher que le plus
+   bas prix connu ailleurs.
+5. **Envoi Telegram** (`notifications`) : ⚠️ jamais envoyés (enregistrés + loggués) ; ❓ envoyés seulement pour
+   les sources communautaires (Dealabs, Pepper…). Les liens Pepper `/visit/...` sont résolus vers l'URL directe du
+   produit (paramètres d'affiliation retirés) ; « Lien marchand » apparaît en premier.
+
+**Budget** : `web_search.max_queries_per_run` (6) et `min_delay_seconds` (9) protègent DuckDuckGo ; si la page
+anti-robot apparaît, la recherche est mise en pause 60 min. Les deals de sites marchands qui ont besoin de la
+recherche web sont alors **reportés** au passage suivant (pas de verdict bâclé) ; les erreurs de prix
+communautaires, urgentes, partent en ❓.
+
+**Moteur** : sources lues en parallèle (`general.max_workers`), pause automatique d'un domaine après 2 blocages
+403/429 consécutifs (`http.domain_cooldown_*`, persistée dans `state.db`), plafond 150 € pour les boutiques UK
+(`general.uk_hosts`).
 
 ## 4. Installation sous Windows (pas à pas)
 
@@ -198,6 +245,12 @@ désactive après 60 jours sans activité sur le dépôt).
 | `filters.resale_brands` | marques à fort potentiel de revente |
 | `triggers.keywords` | mots-clés d'erreur de prix (FR/DE/EN/ES/IT) |
 | `triggers.min_displayed_discount_pct` | réduction affichée minimale (70) |
+| `triggers.resale_brand_min_discount_pct` | seuil réduit (40) pour les marques de `filters.resale_brands` |
+| `brands.blocked_brands` / `brands.verified_brands` | marques rejetées d'office / reconnues sans recherche |
+| `notifications.*` | envoi ou non des ⚠️ et des ❓ (sites directs / communautaires) |
+| `web_search.max_queries_per_run` | recherches DuckDuckGo par passage (6) |
+| `sources.<nom>.min_displayed_discount_pct` | (facultatif) seuil propre à une source, ex. 85 pour Zalando |
+| `general.blocked_pause_minutes` | pause d'une source après un 403 / page anti-robot (60 min) |
 | `triggers.velocity.threshold_deg_per_min` | seuil de vélocité (°/min) |
 | `verification.*` | seuils des verdicts (35 %, 5 %, 30 %…) |
 
@@ -221,6 +274,14 @@ Il affiche la distribution observée et propose un seuil (≈ 2 % des deals les 
 - **Topics Dealabs** : les commentaires sont chargés en JavaScript, ils ne sont donc pas dans le HTML. Le module
   analyse ce qui est présent (JSON embarqué ou HTML) et ne renvoie rien sinon. Le groupe « Erreur de prix » couvre
   l'essentiel.
+- **Fnac** : protégé par DataDome (403 + captcha) même depuis une IP résidentielle. Le bot le détecte, l'écrit
+  proprement dans les logs, met la source en pause 60 min et ne tente aucun contournement. Le parseur est testé sur
+  des fixtures mais n'a pas pu être validé sur une vraie page.
+- **Boulanger** : les pages « Bons plans » / « Vente flash » chargent leurs produits en JavaScript ; on lit donc des
+  pages catégories (liste modifiable dans `config.json`).
+- **Decathlon** : pas de page « Fins de série » publique trouvée (404) ; `/deals` et `/deals/bons-plans` sont lues.
+- **Nouvelles sources** : au premier passage de chaque source nouvellement activée, ses deals sont mémorisés sans
+  alerte (comme `silent_first_run`), pour éviter une avalanche de messages.
 - **Reddit** : désactivé par défaut (Reddit renvoie souvent 403/429 aux clients non connectés).
 - **pepper.it** : fermé depuis le 14/08/2025, laissé désactivé.
 

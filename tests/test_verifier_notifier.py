@@ -9,9 +9,45 @@ H = {"median_90": 200.0, "low_30": 180.0, "max_90": 230.0}
 
 
 def test_true_deal():
-    verdict, real, notes = compute_verdict(100.0, 210.0, 52.4, H, 170.0, "Fnac", V)
+    verdict, real, notes = compute_verdict(100.0, 210.0, 52.4, H, 170.0, "Fnac", V, others=3,
+                                           comparison_complete=True)
     assert verdict == VERDICT_TRUE and real == 50.0
     assert any("gonflé" in n for n in notes)        # mention secondaire : barré 210 > 180*1.05
+
+
+def test_true_deal_never_without_other_merchant_or_official_price():
+    verdict, _, notes = compute_verdict(100.0, None, None, H, None, "", V, others=None)
+    assert verdict == VERDICT_UNVERIFIED and any("Aucun autre marchand" in n for n in notes)
+
+
+def test_true_deal_never_from_merchant_reference_only():
+    verdict, _, _ = compute_verdict(100.0, 300.0, 66.7, {"median_90": 300.0}, None, "", V, others=2,
+                                    comparison_complete=True, history_eligible=False)
+    assert verdict != VERDICT_TRUE
+
+
+def test_true_deal_from_official_price():
+    verdict, _, _ = compute_verdict(60.0, 199.0, 69.8, None, 90.0, "Fnac", V, others=1, official_price=120.0)
+    assert verdict == VERDICT_TRUE                  # 50 % sous le prix officiel et moins cher que partout
+
+
+def test_official_price_rules():
+    v1, _, n1 = compute_verdict(110.0, 250.0, 56.0, None, None, "", V, others=2, official_price=119.0)
+    assert v1 == VERDICT_INFLATED
+    assert any("prix barré 250,00 € > prix officiel 119,00 €" in n for n in n1)
+    assert any("promo proche du prix officiel" in n for n in n1)
+
+
+def test_brand_and_exclusivity_rules():
+    assert compute_verdict(50.0, 300.0, 83.0, None, None, "", V, brand_status="blocked")[0] == VERDICT_INFLATED
+    assert compute_verdict(50.0, 300.0, 83.0, None, None, "", V, brand_status="fake_or_exclusive")[0] == VERDICT_INFLATED
+    v, _, notes = compute_verdict(50.0, 300.0, 83.0, H, None, "", V, brand_status="real", others=0,
+                                  comparison_complete=True)
+    assert v == VERDICT_INFLATED and "exclusivement" in notes[0]
+    # contrôles incomplets (budget / blocage) : pas de conclusion d'exclusivité
+    v2, _, _ = compute_verdict(50.0, None, None, None, None, "", V, brand_status="real", others=0,
+                               comparison_complete=False)
+    assert v2 == VERDICT_UNVERIFIED
 
 
 def test_true_deal_requires_cheaper_than_elsewhere():
@@ -34,7 +70,7 @@ def test_strike_within_tolerance_not_inflated():
     # barré 188 <= 180*1.05 = 189 -> pas gonflé ; réduction réelle 15 % -> pas une vraie affaire
     verdict, _, notes = compute_verdict(170.0, 188.0, 9.6, H, None, "", V)
     assert verdict == VERDICT_INFLATED
-    assert any("pas une vraie affaire" in n for n in notes)
+    assert any("réduction faible face au marché" in n for n in notes)
 
 
 def test_unverified():
@@ -77,7 +113,8 @@ def test_format_alert_contains_all_fields_and_escapes():
     text = format_alert(alerts[0], test=True)
     for label in ("Source", "Marchand", "Pays du site", "Prix actuel", "Prix barré", "Réduction affichée",
                   "Réduction réelle vs médiane 90 j", "Plus bas ailleurs (Idealo)", "Verdict", "Critère(s)",
-                  "Température", "Voir l'offre"):
+                  "Température", "Lien marchand", "Fiche Dealabs", "Marque", "Prix officiel",
+                  "Marchands comparés"):
         assert label in text, label
     assert "✅ Vraie affaire" in text and "-64 %" in text
     assert "⚠️" in format_alert(alerts[1]) and "≈ 229,00 €" in format_alert(alerts[1])

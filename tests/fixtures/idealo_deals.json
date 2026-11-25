@@ -1,0 +1,39 @@
+{
+  "items": [
+    {
+      "id": "214133333",
+      "title": "Asmodée Pokémon Coffret Dresseur d'Élite 30e Anniversaire",
+      "categoryId": "18448",
+      "subheading": "Cartes Pokémon",
+      "href": "https://www.idealo.fr/prix/214133333/asmodee-pokemon-coffret-dresseur-d-elite-30e-anniversaire.html",
+      "offerInfo": {"formattedPrice": "55,99 €", "offerCount": 4, "usedOnly": false,
+                    "leadoutHref": "https://www.idealo.fr/relocator/relocate?offerKey=76d37dd416b014565f0371db73edf73c&price=55.99&sid=12003&type=offer&pos=1"},
+      "bargainInfo": {"saving": 67, "isShortTerm": true},
+      "type": "PRODUCT",
+      "shopInfo": {"shopId": "12003", "shopName": "Amazon.fr"},
+      "rawPrice": 55.99
+    },
+    {
+      "id": "200811096",
+      "title": "GigaByte GeForce RTX 3070 AORUS Master 8 Go DDR6",
+      "categoryId": "16073",
+      "subheading": "Carte graphique",
+      "href": "/prix/200811096/gigabyte-geforce-rtx-3070-aorus-master.html",
+      "offerInfo": {"formattedPrice": "189,00 €", "offerCount": 3, "usedOnly": false, "leadoutHref": null},
+      "bargainInfo": {"saving": 58, "isShortTerm": false},
+      "type": "PRODUCT",
+      "shopInfo": {"shopName": "Rakuten"},
+      "rawPrice": 189.0
+    },
+    {
+      "id": "209000001",
+      "title": "Produit uniquement d'occasion",
+      "offerInfo": {"usedOnly": true},
+      "bargainInfo": {"saving": 80},
+      "type": "PRODUCT",
+      "rawPrice": 10.0
+    },
+    {"id": "ad-1", "title": "Publicité", "type": "AD"}
+  ],
+  "metadata": {"search": {"resultCount": 19433}}
+}

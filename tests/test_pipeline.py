@@ -28,13 +28,18 @@ def make_bot(cfg, tmp_path, http, silent=False):
     cfg["http"]["min_delay_seconds"] = cfg["http"]["max_delay_seconds"] = 0
     src = cfg["sources"]
     src["dealabs"]["topics_enabled"] = False
-    src["dealabs"]["feeds"] = [src["dealabs"]["feeds"][0]]            # flux « nouveaux » (sans contexte)
+    src["dealabs"]["merchant_pages"] = []
+    src["dealabs"]["feeds"] = [dict(src["dealabs"]["feeds"][0], paginate=False)]   # « nouveaux », page 1
+    for name in ("idealo_drops", "decathlon", "boulanger", "fnac", "zalando"):
+        src[name]["enabled"] = False
     src["pepper_eu"]["sites"] = [s for s in src["pepper_eu"]["sites"] if s["name"] == "mydealz"]
     src["pepper_eu"]["sites"][0]["page_urls"] = ["https://www.mydealz.de/new"]
     src["pepper_eu"]["sites"][0]["rss_urls"] = []
     src["camelcamelcamel"]["locales"] = ["fr"]
     src["camelcamelcamel"]["min_interval_minutes"] = 0
     src["reddit"]["enabled"] = False
+    cfg["web_search"]["enabled"] = False         # vérification stricte testée à part (test_strict_verification)
+    cfg["comparators"]["geizhals"]["enabled"] = False
     db = StateDB(tmp_path / "state.db")
     notifier = CaptureNotifier()
     return Bot(cfg, None, db, notifier, http=http), notifier, db
@@ -61,12 +66,12 @@ def test_full_run(cfg, tmp_path):
     # Dealabs : écran Samsung (mot-clé + -83 %) ; Lego sans critère ; expiré ignoré
     assert any("Samsung Odyssey" in t for t in titles["dealabs"])
     assert not any("LEGO" in t for t in titles["dealabs"])
-    # mydealz : Switch 2 (Preisfehler, -71 %) livrée par amazon.de ; Bose (Amazon, -56 %) déclenché
-    # uniquement par la vélocité : 330° en 5 min = 66 °/min ; SSD MediaMarkt non livrable en France
+    # mydealz : Switch 2 (Preisfehler, -71 %) livrée par amazon.de ; Bose (Amazon, -56 %) déclenché par le seuil
+    # « marque revente » (≥ 50 %) et la vélocité (330° en 5 min) ; SSD MediaMarkt non livrable en France
     assert titles["mydealz"] == ["Nintendo Switch 2 + Mario Kart World Bundle [Preisfehler?]",
                                  "Bose QuietComfort Ultra Kopfhörer"]
     bose = next(a for a in notifier.alerts if "Bose" in a.deal.title)
-    assert len(bose.triggers) == 1 and bose.triggers[0].startswith("Vélocité")
+    assert "marque revente « Bose »" in bose.triggers[0] and bose.triggers[1].startswith("Vélocité")
     # camel : AirPods 4 -74 % ; Grundig -7 % -> rien
     assert titles["camelcamelcamel-fr"] == ["Apple AirPods 4 avec Réduction Active du Bruit"]
     assert stats["sent"] == len(notifier.alerts) == 4

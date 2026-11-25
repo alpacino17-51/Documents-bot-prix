@@ -6,6 +6,10 @@
     "max_alerts_per_run": 15,
     "silent_first_run": true,
     "loop_interval_seconds": 120,
+    "blocked_pause_minutes": 60,
+    "max_workers": 5,
+    "uk_max_price_eur": 150,
+    "uk_hosts": ["amazon.co.uk", "endclothing.com", "size.co.uk"],
     "log_level": "INFO",
     "db_path": "state.db",
     "fx_to_eur": {
@@ -24,7 +28,103 @@
     "max_retries": 2,
     "min_delay_seconds": 2.0,
     "max_delay_seconds": 4.5,
-    "accept_language": "fr-FR,fr;q=0.9,en;q=0.7"
+    "accept_language": "fr-FR,fr;q=0.9,en;q=0.7",
+    "domain_cooldown_after_failures": 2,
+    "domain_cooldown_minutes": 60
+  },
+
+  "notifications": {
+    "send_inflated_alerts": false,
+    "send_unverified_alerts_direct_sites": false,
+    "send_unverified_alerts_community": true,
+    "community_sources": ["dealabs", "pepper_eu", "reddit", "camelcamelcamel"]
+  },
+
+  "links": {
+    "resolve_pepper_links": true,
+    "timeout_seconds": 8,
+    "cache_hours": 168
+  },
+
+  "web_search": {
+    "enabled": true,
+    "endpoint": "https://html.duckduckgo.com/html/",
+    "region": "fr-fr",
+    "max_queries_per_run": 6,
+    "min_delay_seconds": 9,
+    "cache_hours": 72,
+    "pause_minutes_after_block": 60
+  },
+
+  "official_price": {
+    "enabled": true,
+    "cache_hours": 24,
+    "min_title_similarity": 0.5
+  },
+
+  "comparators": {
+    "cache_hours": 12,
+    "web_min_title_similarity": 0.35,
+    "geizhals": {
+      "enabled": true,
+      "search_url_template": "https://geizhals.eu/?fs={query}",
+      "min_title_similarity": 0.55
+    }
+  },
+
+  "brands": {
+    "cache_days": 30,
+    "min_independent_resellers": 2,
+    "_blocked_note": "Marques distributeurs / exclusives à prix barrés gonflés : rejetées d'office (modifiable).",
+    "blocked_brands": [
+      "Pier One", "Zign", "Even&Odd", "Even & Odd", "Anna Field", "Yourturn", "Your Turn", "Kiomi", "Mint&Berry",
+      "Mint & Berry", "Twintip", "Zalando Essentials", "YOURTURN Active", "Pier One Sport", "Anna Field Mama",
+      "Even&Odd active", "Edited", "ABOUT YOU", "LeGer by Lena Gercke", "Guido Maria Kretschmer",
+      "Amazon Essentials", "Amazon Basics", "find.", "Meraki", "Iris & Lilly", "Goodthreads",
+      "Essentielb", "Continental Edison", "Proline", "Listo", "Valberg", "Qilive", "Selecline", "Bluesky",
+      "Brandt Outlet", "Shein", "Romwe", "Emery Rose"
+    ],
+    "verified_brands": [
+      "Apple", "Samsung", "Sony", "LG", "Philips", "Panasonic", "TCL", "Hisense", "Xiaomi", "Huawei", "Honor",
+      "OnePlus", "Google", "Oppo", "Motorola", "Nothing", "Microsoft", "Nintendo", "PlayStation", "Xbox",
+      "Valve", "Meta", "Bose", "JBL", "Sennheiser", "Marshall", "Sonos", "Bang & Olufsen", "Beats", "Jabra",
+      "Audio-Technica", "Logitech", "Razer", "Corsair", "SteelSeries", "HyperX", "Asus", "Acer", "Lenovo", "HP",
+      "Dell", "MSI", "Gigabyte", "AMD", "Intel", "Nvidia", "Western Digital", "WD", "Seagate", "Crucial",
+      "Kingston", "SanDisk", "Samsung", "Garmin", "Fitbit", "Polar", "Suunto", "Coros", "DJI", "GoPro", "Insta360",
+      "Canon", "Nikon", "Fujifilm", "Dyson", "Rowenta", "Moulinex", "Seb", "Tefal", "Krups", "De'Longhi",
+      "DeLonghi", "Nespresso", "KitchenAid", "Kenwood", "Bosch", "Siemens", "Miele", "Braun", "Oral-B",
+      "Philips Sonicare", "iRobot", "Roborock", "Ecovacs", "Dreame", "Ninja", "Thermomix", "Le Creuset", "Staub",
+      "Smeg", "Nike", "Adidas", "Puma", "New Balance", "Asics", "Reebok", "Vans", "Converse", "Salomon", "Hoka",
+      "On", "Saucony", "Brooks", "Mizuno", "Under Armour", "Columbia", "The North Face", "Patagonia", "Arc'teryx",
+      "Levi's", "Lacoste", "Ralph Lauren", "Polo Ralph Lauren", "Tommy Hilfiger", "Calvin Klein", "Hugo Boss",
+      "BOSS", "Carhartt", "Carhartt WIP", "Napapijri", "Timberland", "Dr. Martens", "UGG", "Birkenstock",
+      "Stone Island", "Moncler", "Canada Goose", "Fila", "Champion", "Jordan", "Lego", "Playmobil", "Hasbro",
+      "Mattel", "Pokémon", "Ravensburger", "Quechua", "Kiprun", "Rockrider", "Domyos", "Kalenji", "Btwin",
+      "Wedze", "Forclaz", "Tribord", "Lexar", "Skullcandy", "Baseus", "Anker", "Soundcore", "Ugreen", "Eufy",
+      "Belkin", "Netgear", "TP-Link", "Ubiquiti", "Synology", "Elgato", "Shure", "Rode", "Fairphone", "Withings",
+      "Amazfit", "Huion", "Wacom", "Epson", "Brother", "Kärcher", "Makita", "DeWalt", "Ryobi", "Black+Decker",
+      "Weber", "Tefal", "Zwilling", "Opinel", "Victorinox", "Fjällräven", "Eastpak", "Herschel", "Samsonite",
+      "Ekoï", "PDP", "8BitDo", "Turtle Beach", "Astro", "Thrustmaster", "Hori", "Ravensburger", "Funko"
+    ],
+    "official_domains": {
+      "Apple": "apple.com", "Sony": "sony.fr", "Nike": "nike.com", "Adidas": "adidas.fr", "Dyson": "dyson.fr",
+      "Lego": "lego.com", "Nintendo": "nintendo.com", "Samsung": "samsung.com", "Garmin": "garmin.com",
+      "Bose": "bose.fr", "DJI": "store.dji.com", "GoPro": "gopro.com", "New Balance": "newbalance.fr",
+      "KitchenAid": "kitchenaid.fr", "Le Creuset": "lecreuset.fr", "Asics": "asics.com", "Salomon": "salomon.com",
+      "The North Face": "thenorthface.fr", "Logitech": "logitech.com", "JBL": "jbl.com", "Philips": "philips.fr"
+    },
+    "official_domain_suffixes": ["official", "group", "running", "store", "world"],
+    "suspicious_domain_words": ["france", "fr", "outlet", "soldes", "sale", "promo", "discount", "cheap",
+                                "pascher", "boutique", "shopfr", "online", "store-fr", "eu", "officiel"],
+    "marketplace_domains": ["zalando", "amazon", "cdiscount", "ebay", "aliexpress", "temu", "shein", "wish",
+                            "vinted", "leboncoin", "rakuten", "aboutyou", "veepee", "showroomprive", "joom",
+                            "fruugo", "priceminister", "manomano", "allegro", "etsy"],
+    "non_retail_domains": ["wikipedia", "facebook", "instagram", "youtube", "pinterest", "tiktok", "linkedin",
+                           "twitter", "x", "reddit", "trustpilot", "dealabs", "mydealz", "hotukdeals",
+                           "chollometro", "idealo", "google", "duckduckgo", "bing", "yahoo", "quora", "lemonde",
+                           "lefigaro", "20minutes", "lesnumeriques", "frandroid", "01net", "avis-verifies",
+                           "societe", "pappers", "infogreffe", "glassdoor", "indeed", "wikiwand", "fandom",
+                           "medium", "blogspot", "wordpress", "scamadviser", "scam-detector"]
   },
 
   "sources": {
@@ -36,12 +136,14 @@
       "visit_path": "visit/homenew",
       "country": "FR",
       "fetch_order": ["json", "rss", "html"],
+      "pages_per_feed": 2,
       "feeds": [
         {
           "name": "nouveaux",
           "page_url": "https://www.dealabs.com/nouveaux",
           "rss_url": "https://www.dealabs.com/rss/nouveaux",
-          "price_error_context": false
+          "price_error_context": false,
+          "paginate": true
         },
         {
           "name": "hot",
@@ -53,8 +155,19 @@
           "name": "groupe erreur de prix",
           "page_url": "https://www.dealabs.com/groupe/erreur-de-prix",
           "rss_url": "https://www.dealabs.com/rss/groupe/erreur-de-prix",
-          "price_error_context": true
+          "price_error_context": true,
+          "paginate": true
         }
+      ],
+      "_merchant_pages_note": "/bons-plans/<enseigne> redirige vers une page de codes promo sans deals : on utilise la recherche Dealabs triée par date, filtrée sur le nom du marchand.",
+      "merchant_pages_min_interval_minutes": 10,
+      "merchant_pages": [
+        {"name": "boulanger", "url": "https://www.dealabs.com/search?q=boulanger&sortBy=new", "merchant_filter": "boulanger"},
+        {"name": "fnac", "url": "https://www.dealabs.com/search?q=fnac&sortBy=new", "merchant_filter": "fnac"},
+        {"name": "decathlon", "url": "https://www.dealabs.com/search?q=decathlon&sortBy=new", "merchant_filter": "decathlon"},
+        {"name": "zalando", "url": "https://www.dealabs.com/search?q=zalando&sortBy=new", "merchant_filter": "zalando"},
+        {"name": "darty", "url": "https://www.dealabs.com/search?q=darty&sortBy=new", "merchant_filter": "darty"},
+        {"name": "cdiscount", "url": "https://www.dealabs.com/search?q=cdiscount&sortBy=new", "merchant_filter": "cdiscount"}
       ],
       "topics_enabled": true,
       "topics_min_interval_minutes": 15,
@@ -155,6 +268,80 @@
       "fetch_order": ["json", "rss", "html"]
     },
 
+    "idealo_drops": {
+      "enabled": true,
+      "min_interval_minutes": 10,
+      "page_url": "https://www.idealo.fr/bons-plans",
+      "_note": "API publique liée depuis la page /bons-plans. Filtres : discountFrom/discountTo (%), priceTo (€), categoryId (optionnel).",
+      "api_urls": [
+        "https://www.idealo.fr/csr/api/v2/modules/dealsResult?locale=fr_FR&itemsPerPage=60&discountFrom=50&discountTo=100&priceTo=200&itemStates=BARGAIN",
+        "https://www.idealo.fr/csr/api/v2/modules/dealsResult?locale=fr_FR&itemsPerPage=60&discountFrom=70&discountTo=100&priceTo=200&itemStates=BARGAIN"
+      ]
+    },
+
+    "decathlon": {
+      "enabled": true,
+      "min_interval_minutes": 10,
+      "base_url": "https://www.decathlon.fr",
+      "_note": "Pas de page « fins de série » publique trouvée (404) : /deals et /deals/bons-plans + page 2.",
+      "page_urls": [
+        "https://www.decathlon.fr/deals",
+        "https://www.decathlon.fr/deals?from=40&size=40",
+        "https://www.decathlon.fr/deals/bons-plans"
+      ]
+    },
+
+    "boulanger": {
+      "enabled": true,
+      "min_interval_minutes": 10,
+      "base_url": "https://www.boulanger.com",
+      "include_refurbished": false,
+      "_note": "Les pages « bons plans » / « vente flash » chargent les produits en JavaScript : on lit les pages liste de catégories (JSON embarqué avec % de remise).",
+      "page_urls": [
+        "https://www.boulanger.com/c/ecran-pc-moniteur",
+        "https://www.boulanger.com/c/tous-les-ordinateurs-portables",
+        "https://www.boulanger.com/c/barre-de-son",
+        "https://www.boulanger.com/c/console-playstation-5",
+        "https://www.boulanger.com/c/switch",
+        "https://www.boulanger.com/c/friteuse"
+      ]
+    },
+
+    "fnac": {
+      "enabled": true,
+      "min_interval_minutes": 15,
+      "base_url": "https://www.fnac.com",
+      "_note": "fnac.com est protégé par DataDome (403 + captcha). Le bot le signale et met la source en pause, sans contournement.",
+      "page_urls": [
+        "https://www.fnac.com/Bons-plans/cl1",
+        "https://www.fnac.com/ventes-flash"
+      ]
+    },
+
+    "zalando": {
+      "enabled": true,
+      "min_interval_minutes": 15,
+      "base_url": "https://www.zalando.fr",
+      "page_urls": [
+        "https://www.zalando.fr/promo-homme/?order=sale",
+        "https://www.zalando.fr/promo-femme/?order=sale",
+        "https://www.zalando.fr/promo-sport-homme/?order=sale",
+        "https://www.zalando.fr/promo-sport-femme/?order=sale"
+      ]
+    },
+
+    "idealo_de": {
+      "enabled": true,
+      "_note": "Comparateur de secours (vérification uniquement), utilisé quand idealo.fr ne trouve pas le produit.",
+      "base_url": "https://www.idealo.de",
+      "cache_prefix": "idealo_de",
+      "search_url_template": "https://www.idealo.de/preisvergleich/MainSearchProductCategory.html?q={query}",
+      "history_api_enabled": false,
+      "cache_hours": 12,
+      "min_title_similarity": 0.55,
+      "max_candidates": 8
+    },
+
     "idealo": {
       "enabled": true,
       "base_url": "https://www.idealo.fr",
@@ -234,6 +421,7 @@
       "kein preisfehler", "no es un error", "non e un errore"
     ],
     "min_displayed_discount_pct": 70,
+    "resale_brand_min_discount_pct": 40,
     "price_error_context_counts_as_keyword": true,
     "velocity": {
       "enabled": true,
@@ -247,6 +435,9 @@
 
   "verification": {
     "true_deal_min_below_median_pct": 35,
+    "true_deal_min_below_official_pct": 30,
+    "official_inflated_tolerance_pct": 10,
+    "max_seconds_per_run": 150,
     "inflated_tolerance_pct": 5,
     "inflated_min_real_discount_pct": 30,
     "strong_displayed_discount_pct": 50,

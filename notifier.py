@@ -13,7 +13,8 @@ log = logging.getLogger(__name__)
 API = "https://api.telegram.org/bot{token}/{method}"
 COUNTRY_FLAGS = {"FR": "🇫🇷", "DE": "🇩🇪", "UK": "🇬🇧", "GB": "🇬🇧", "ES": "🇪🇸", "IT": "🇮🇹", "US": "🇺🇸"}
 CURRENCY_SIGNS = {"EUR": "€", "GBP": "£", "USD": "$"}
-HISTORY_LABELS = {"camel": "CamelCamelCamel", "idealo": "Idealo", "local": "historique local"}
+HISTORY_LABELS = {"camel": "CamelCamelCamel", "idealo": "Idealo", "local": "historique local",
+                  "merchant": "référence marchand", "idealo_bargain": "prix habituel Idealo"}
 
 
 def e(text) -> str:
@@ -28,6 +29,24 @@ def money(value: Optional[float], currency: str = "EUR") -> str:
     return f"£{s}" if currency == "GBP" else (f"${s}" if currency == "USD" else f"{s} {sign}")
 
 
+BRAND_LABELS = {"verified": "vérifiée", "real": "réelle : site officiel / revendeurs",
+                "blocked": "marque distributeur", "fake_or_exclusive": "introuvable hors site source",
+                "unknown": "non vérifiée"}
+
+
+def source_page_label(d) -> str:
+    host = (d.url or "").lower()
+    if "dealabs." in host:
+        return "Fiche Dealabs"
+    if any(p in host for p in ("mydealz.", "hotukdeals.", "chollometro.", "pepper.")):
+        return "Fiche Pepper"
+    if "reddit." in host:
+        return "Fil Reddit"
+    if "idealo." in host:
+        return "Fiche Idealo"
+    return "Page source"
+
+
 def format_alert(alert: Alert, test: bool = False) -> str:
     d, v = alert.deal, alert.verification
     title = d.title if len(d.title) <= 220 else d.title[:217] + "…"
@@ -39,6 +58,8 @@ def format_alert(alert: Alert, test: bool = False) -> str:
     lines.append("")
     lines.append(f"📰 <b>Source :</b> {e(d.source)}")
     lines.append(f"🏪 <b>Marchand :</b> {e(d.merchant or '—')}")
+    if v.brand:
+        lines.append(f"🏷 <b>Marque :</b> {e(v.brand)} ({e(BRAND_LABELS.get(v.brand_status, v.brand_status))})")
     lines.append(f"{flag} <b>Pays du site :</b> {e(d.site_country or '—')}")
 
     price = money(d.price, d.currency)
@@ -63,12 +84,17 @@ def format_alert(alert: Alert, test: bool = False) -> str:
     else:
         lines.append("📊 <b>Réduction réelle vs médiane 90 j :</b> —")
 
+    if v.official_price is not None:
+        lines.append(f"🏛 <b>Prix officiel (site de la marque) :</b> {e(money(v.official_price))}")
     if v.lowest_elsewhere is not None:
         shop = f" chez {e(v.lowest_elsewhere_shop)}" if v.lowest_elsewhere_shop else ""
         lines.append(f"🔎 <b>Plus bas ailleurs (Idealo) :</b> {e(money(v.lowest_elsewhere))}{shop}")
     else:
         reason = f" ({e(v.skipped_idealo_reason)})" if v.skipped_idealo_reason else ""
         lines.append(f"🔎 <b>Plus bas ailleurs (Idealo) :</b> —{reason}")
+    if v.others_count is not None:
+        via = f" via {e(', '.join(v.comparators))}" if v.comparators else ""
+        lines.append(f"👥 <b>Marchands comparés :</b> {v.others_count} autre(s) marchand(s){via}")
 
     lines.append("")
     lines.append(f"🧾 <b>Verdict : {e(VERDICT_LABELS.get(v.verdict, v.verdict))}</b>")
@@ -79,9 +105,13 @@ def format_alert(alert: Alert, test: bool = False) -> str:
         vel = f" (+{alert.velocity:.1f} °/min)" if alert.velocity is not None else ""
         lines.append(f"🌡️ <b>Température :</b> {d.temperature:.0f}°{vel}")
 
-    links = [f'<a href="{e(d.url)}">👉 Voir l\'offre</a>']
-    if d.merchant_url and d.merchant_url != d.url:
-        links.append(f'<a href="{e(d.merchant_url)}">Lien marchand</a>')
+    # ordre : lien marchand direct d'abord, puis fiche communautaire, site officiel, Idealo
+    merchant_link = d.merchant_url or d.url
+    links = [f'<a href="{e(merchant_link)}">👉 Lien marchand</a>']
+    if d.url and d.url != merchant_link:
+        links.append(f'<a href="{e(d.url)}">{e(source_page_label(d))}</a>')
+    if v.official_url:
+        links.append(f'<a href="{e(v.official_url)}">Site officiel</a>')
     if v.idealo_url:
         links.append(f'<a href="{e(v.idealo_url)}">Idealo</a>')
     lines.append("")

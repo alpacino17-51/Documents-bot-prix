@@ -31,6 +31,15 @@ _PRODUCT_ID = re.compile(r"/(?:prix|preisvergleich/OffersOfProduct|prixcompare/O
 
 # ------------------------------------------------------------------ parseurs
 
+def idealo_url(href: str, base_url: str = "https://www.idealo.fr") -> str:
+    """URL absolue d'une fiche Idealo ; certains résultats n'ont qu'un identifiant haché en guise de lien -> ''."""
+    if href.startswith("http"):
+        return href
+    if href.startswith("/"):
+        return base_url.rstrip("/") + href
+    return ""
+
+
 def parse_search_results(html: str, base_url: str = "https://www.idealo.fr") -> list[dict]:
     m = _SEARCH_B64.search(html)
     items: list[dict] = []
@@ -47,7 +56,6 @@ def parse_search_results(html: str, base_url: str = "https://www.idealo.fr") -> 
             price = it.get("rawPrice")
             if price is None and offer.get("formattedPrice"):
                 price = parse_price(offer["formattedPrice"])[0]
-            href = it.get("href") or ""
             items.append({
                 "product_id": str(it.get("id", "")),
                 "title": it.get("title", ""),
@@ -55,7 +63,7 @@ def parse_search_results(html: str, base_url: str = "https://www.idealo.fr") -> 
                 "shop": shop.get("shopName", ""),
                 "offer_count": offer.get("offerCount"),
                 "used_only": bool(offer.get("usedOnly")),
-                "url": href if href.startswith("http") else base_url + href,
+                "url": idealo_url(it.get("href") or "", base_url),
             })
         return items
     # Secours HTML : tuiles de résultats avec lien produit
@@ -173,6 +181,7 @@ class IdealoSource(BaseSource):
         self.db = None
         self.filters_cfg: dict = {}
         self._history_broken = False
+        self.last_lookup_failed = False
 
     def fetch(self) -> list[Deal]:
         return []  # module de vérification uniquement
@@ -226,7 +235,8 @@ class IdealoSource(BaseSource):
 
     def lookup(self, deal: Deal) -> Optional[dict]:
         """Cherche le produit sur Idealo (EAN/GTIN -> MPN -> titre nettoyé). Résultat mis en cache 12 h."""
-        cache_key = "idealo:" + (deal.ean or deal.mpn or title_hash(deal.title))
+        self.last_lookup_failed = False
+        cache_key = self.cfg.get("cache_prefix", "idealo") + ":" + (deal.ean or deal.mpn or title_hash(deal.title))
         db = self.db
         if db is not None:
             cached = db.cache_get(cache_key, float(self.cfg.get("cache_hours", 12)))
@@ -241,6 +251,7 @@ class IdealoSource(BaseSource):
                 candidates, direct = self.search(query)
             except FetchError as exc:
                 self.log.info("Recherche Idealo impossible (%s)", exc)
+                self.last_lookup_failed = True
                 return None     # pas de mise en cache : on réessaiera au prochain passage
             by_code = by in ("EAN", "MPN")
             if direct and direct.get("product_id"):
@@ -290,7 +301,7 @@ class IdealoSource(BaseSource):
         merchant = normalize_text(deal.merchant).split(".")[0]
         if merchant and merchant in normalize_text(result.get("lowest_shop", "")):
             offers = result.get("offers")
-            if not offers and result.get("url"):
+            if not offers and result.get("url", "").startswith(self.base_url + "/"):
                 try:
                     offers = self.product(result["url"]).get("offers", [])
                 except FetchError:
@@ -299,6 +310,12 @@ class IdealoSource(BaseSource):
             if others:
                 result["lowest_price"] = others[0]["price"]
                 result["lowest_shop"] = others[0]["shop"]
+            else:
+                # aucune autre offre connue : le « plus bas » est l'offre du deal elle-même (offres lues),
+                # ou bien la liste des offres n'a pas pu être lue -> le prix des concurrents est inconnu
+                result["lowest_is_same_merchant"] = True
+                if not offers:
+                    result["offers_unknown"] = True
             result["offers"] = offers
         result["history"] = self.history(result.get("product_id", ""))
         result["offers"] = result.get("offers", [])[:5]

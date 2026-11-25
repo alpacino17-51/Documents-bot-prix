@@ -161,7 +161,8 @@ def pct_below(price: float, reference: float) -> float:
 _TRACKING_PREFIXES = ("utm_", "pf_rd_", "pd_rd_", "ref", "tag", "linkcode", "creative", "camp", "ascsubtag",
                       "gclid", "fbclid", "affid", "aff_", "awc", "ranmid", "ranEaid", "ransiteid", "psc",
                       "smid", "th", "spla", "content-id", "sr", "qid", "keywords", "crid", "sprefix", "dib",
-                      "dib_tag", "mc_", "srsltid", "_encoding", "xtor", "cmp", "origin")
+                      "dib_tag", "mc_", "srsltid", "_encoding", "xtor", "cmp", "origin", "eaf-", "affiliate",
+                      "aff", "subid", "clickref", "cjevent", "irclickid", "wt_mc", "ito", "emc")
 _AMAZON_ASIN_URL = re.compile(r"/(?:dp|gp/product|gp/aw/d|exec/obidos/asin|product|o/asin)/([A-Z0-9]{10})(?:[/?#]|$)", re.I)
 
 
@@ -184,6 +185,23 @@ def normalize_url(url: str) -> str:
              if not k.lower().startswith(_TRACKING_PREFIXES)]
     path = re.sub(r"/+$", "", parts.path) or "/"
     return urlunsplit(("https", host, path, urlencode(sorted(query)), ""))
+
+
+def clean_url(url: str) -> str:
+    """Retire les paramètres de suivi/affiliation et l'ancre, sans toucher au domaine ni au chemin."""
+    if not url:
+        return ""
+    try:
+        parts = urlsplit(html_lib.unescape(url.strip()))
+    except ValueError:
+        return url
+    if "amazon." in (parts.hostname or ""):
+        m = _AMAZON_ASIN_URL.search(parts.path)
+        if m:
+            return f"{parts.scheme or 'https'}://{parts.netloc}/dp/{m.group(1).upper()}"
+    query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
+             if not k.lower().startswith(_TRACKING_PREFIXES)]
+    return urlunsplit((parts.scheme or "https", parts.netloc, parts.path, urlencode(query), ""))
 
 
 def url_host(url: str) -> str:

@@ -16,16 +16,22 @@ import logging.handlers
 import statistics
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+from brand_checker import BrandChecker
+from comparators import MultiComparator
 from db import StateDB
+from official_price import OfficialPriceFinder
+from web_search import WebSearch
 from filters import category_ok, evaluate_triggers, price_ok
 from http_client import HttpClient
 from models import VERDICT_INFLATED, VERDICT_TRUE, VERDICT_UNVERIFIED, Alert, Deal, Verification
 from notifier import ConsoleNotifier, TelegramNotifier
 from settings import ROOT, load_config, load_dotenv_if_present, load_secrets
-from sources import FEED_SOURCES, CamelSource, IdealoSource
-from utils import extract_asin, extract_ean, extract_mpn, normalize_url, title_hash, to_eur
+from sources import FEED_SOURCES, LEGACY_SOURCES, CamelSource, IdealoSource
+from utils import (clean_url, extract_asin, extract_ean, extract_mpn, normalize_url, title_hash, to_eur,
+                   url_host)
 from verifier import Verifier
 
 log = logging.getLogger("bot")
@@ -82,39 +88,108 @@ class Bot:
             src.db = db
             self.sources.append(src)
         self.camel = next((s for s in self.sources if isinstance(s, CamelSource)), None)
+        if hasattr(self.http, "cooldown_store"):
+            self.http.cooldown_store = db          # pause automatique par domaine, persistée dans state.db
         self.idealo = IdealoSource(src_cfg.get("idealo", {}), self.http, general)
         self.idealo.db = db
         self.idealo.filters_cfg = cfg.get("filters", {})
-        self.verifier = Verifier(cfg, db, self.idealo, self.camel)
+        de_cfg = src_cfg.get("idealo_de", {})
+        self.idealo_de = IdealoSource(de_cfg, self.http, general) if de_cfg else None
+        if self.idealo_de is not None:
+            self.idealo_de.db = db
+            self.idealo_de.filters_cfg = cfg.get("filters", {})
+        brands_cfg = cfg.get("brands", {})
+        resale = cfg.get("filters", {}).get("resale_brands", [])
+        self.web = WebSearch(cfg.get("web_search", {}), self.http, db)
+        self.verifier = Verifier(
+            cfg, db, self.idealo, self.camel, web=self.web,
+            brand_checker=BrandChecker(brands_cfg, resale, self.web, db),
+            comparator=MultiComparator(cfg.get("comparators", {}), self.http, db, idealo_fr=self.idealo,
+                                       idealo_de=self.idealo_de, web=self.web, brands_cfg=brands_cfg),
+            official=OfficialPriceFinder(cfg.get("official_price", {}), self.http, self.web, db))
+        self.report: dict[str, str] = {}
+        # bases créées avant le « premier passage silencieux par source » : les anciennes sources sont déjà rodées
+        if db.is_initialized() and db.get_meta("per_source_init") != "1":
+            for name in LEGACY_SOURCES:
+                db.mark_source_initialized(name)
+            db.set_meta("per_source_init", "1")
 
     def collect(self) -> list[Deal]:
+        """Lit les sources dues EN PARALLÈLE (ThreadPoolExecutor, `general.max_workers`)."""
         deals: list[Deal] = []
+        self.report = {}
+        general = self.cfg.get("general", {})
+        pause_min = float(general.get("blocked_pause_minutes", 60))
+        due = []
         for src in self.sources:
             if not src.enabled:
                 continue
+            paused = self.db.paused_for(src.name)
+            if paused > 0:
+                self.report[src.name] = f"en pause ({paused:.0f} min restantes)"
+                continue
             if not self.db.source_due(src.name, src.min_interval_minutes):
                 log.debug("%s : intervalle minimal non écoulé, ignorée ce passage", src.name)
+                self.report[src.name] = "intervalle non écoulé"
                 continue
-            deals.extend(src.safe_fetch())
+            due.append(src)
+
+        workers = max(1, int(general.get("max_workers", 5)))
+        results: dict[str, list[Deal]] = {}
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="source") as pool:
+            futures = {pool.submit(src.safe_fetch): src for src in due}
+            for fut in as_completed(futures):
+                src = futures[fut]
+                try:
+                    results[src.name] = fut.result()
+                except Exception:            # safe_fetch gère déjà les erreurs ; ceinture + bretelles
+                    log.exception("Source %s : erreur inattendue", src.name)
+                    results[src.name] = []
+
+        for src in due:                      # ordre stable (celui de config / FEED_SOURCES)
+            got = results.get(src.name, [])
             self.db.mark_source_run(src.name)
+            status = f"{len(got)} deal(s)"
+            if src.pages_failed:
+                status += f", {src.pages_failed} page(s) en échec"
+            if src.blocked:
+                status += f", BLOQUÉ ({src.blocked})"
+                if not got and pause_min > 0:
+                    self.db.pause_source(src.name, pause_min)
+                    status += f" -> pause {pause_min:.0f} min"
+            self.report[src.name] = status
+            deals.extend(got)
         return deals
+
+    def _triggers_for(self, deal: Deal, triggers_cfg: dict) -> dict:
+        """Seuils propres à une source (facultatif) : sources.<nom>.min_displayed_discount_pct / resale_brand_..."""
+        src_cfg = self.cfg.get("sources", {}).get(deal.origin, {}) if deal.origin else {}
+        overrides = {k: src_cfg[k] for k in ("min_displayed_discount_pct", "resale_brand_min_discount_pct")
+                     if k in src_cfg}
+        return {**triggers_cfg, **overrides} if overrides else triggers_cfg
 
     def run_once(self) -> dict:
         general = self.cfg.get("general", {})
         triggers_cfg = self.cfg.get("triggers", {})
         vel_cfg = triggers_cfg.get("velocity", {})
         fx = general.get("fx_to_eur", {"EUR": 1.0})
-        bootstrap = general.get("silent_first_run", True) and not self.db.is_initialized()
+        silent = general.get("silent_first_run", True)
+        bootstrap = silent and not self.db.is_initialized()
+        resale_brands = self.cfg.get("filters", {}).get("resale_brands", [])
         max_alerts = int(general.get("max_alerts_per_run", 15))
         max_age = float(general.get("max_deal_age_hours", 48)) * 3600
 
         started = time.time()
         if hasattr(self.http, "reset_run"):
             self.http.reset_run()
+        self.web.reset_run()
+        self.verifier.reset_run()
         deals = self.collect()
         now = time.time()
-        stats = {"deals": len(deals), "triggered": 0, "duplicates": 0, "sent": 0, "bootstrap": 0, "failed": 0}
+        stats = {"deals": len(deals), "triggered": 0, "duplicates": 0, "sent": 0, "bootstrap": 0, "failed": 0,
+                 "deferred": 0, "filtered": 0, "verdicts": {}}
         seen_this_run: set[str] = set()
+        triggered_by: dict[str, int] = {}
 
         for deal in deals:
             deal.price_eur = to_eur(deal.price, deal.currency, fx)
@@ -141,10 +216,11 @@ class Bot:
                     max_window_min=float(vel_cfg.get("max_window_minutes", 60)),
                     published_at=deal.published_at if vel_cfg.get("use_publication_time", True) else None,
                     current_temp=deal.temperature)
-            triggers = evaluate_triggers(deal, triggers_cfg, velocity)
+            triggers = evaluate_triggers(deal, self._triggers_for(deal, triggers_cfg), velocity, resale_brands)
             if not triggers:
                 continue
             stats["triggered"] += 1
+            triggered_by[deal.origin or deal.source] = triggered_by.get(deal.origin or deal.source, 0) + 1
 
             deal.asin = deal.asin or extract_asin(deal.merchant_url, deal.url, deal.description)
             deal.ean = deal.ean or extract_ean(deal.title, deal.description)
@@ -155,7 +231,8 @@ class Bot:
                 continue
             seen_this_run.update(keys)
 
-            if bootstrap:
+            # premier passage (global, ou d'une source nouvellement activée) : on mémorise sans alerter
+            if bootstrap or (silent and deal.origin and not self.db.is_source_initialized(deal.origin)):
                 self.db.record_alert(keys, deal_key=deal.key, source=deal.source, title=deal.title, url=deal.url,
                                      price_eur=deal.price_eur, verdict="bootstrap", sent=False)
                 stats["bootstrap"] += 1
@@ -168,8 +245,21 @@ class Bot:
                 continue        # on continue la boucle pour enregistrer les températures
 
             log.info("Déclenché [%s] %s — %s", deal.source, deal.title[:90], " | ".join(triggers))
+            self.resolve_merchant_link(deal)
             verification = self.verifier.verify(deal)
+            if verification.deferred:
+                stats["deferred"] += 1
+                continue        # budget de vérification atteint : sera repris au prochain passage
+            keys = list(dict.fromkeys(keys + dedup_keys(deal)))      # + URL marchand directe / ASIN résolus
             alert = Alert(deal=deal, verification=verification, triggers=triggers, velocity=velocity)
+            stats["verdicts"][verification.verdict] = stats["verdicts"].get(verification.verdict, 0) + 1
+            send, why = self.should_send(deal, verification)
+            if not send:
+                log.info("Non envoyé (%s) : %s — %s", why, deal.title[:90], " ; ".join(verification.notes[:2]))
+                self.db.record_alert(keys, deal_key=deal.key, source=deal.source, title=deal.title, url=deal.url,
+                                     price_eur=deal.price_eur, verdict=verification.verdict, sent=False)
+                stats["filtered"] += 1
+                continue
             if self.notifier.send(alert):
                 self.db.record_alert(keys, deal_key=deal.key, source=deal.source, title=deal.title, url=deal.url,
                                      price_eur=deal.price_eur, verdict=verification.verdict)
@@ -177,16 +267,65 @@ class Bot:
             else:
                 stats["failed"] += 1
 
+        fetched = {d.origin for d in deals if d.origin}
+        new_sources = [o for o in fetched if not self.db.is_source_initialized(o)]
+        for origin in fetched:
+            self.db.mark_source_initialized(origin)
         if bootstrap:
             self.db.mark_initialized()
-            log.info("Premier passage : %d deal(s) déjà en ligne mémorisé(s) SANS alerte (silent_first_run). "
-                     "Les alertes commencent au prochain passage.", stats["bootstrap"])
+            self.db.set_meta("per_source_init", "1")
+        if stats["bootstrap"]:
+            log.info("Premier passage %s: %d deal(s) déjà en ligne mémorisé(s) SANS alerte (silent_first_run). "
+                     "Les alertes commencent au prochain passage.",
+                     "" if bootstrap else f"de {', '.join(sorted(new_sources))} ", stats["bootstrap"])
+        if self.report:
+            log.info("Bilan par source : %s", " | ".join(
+                f"{k}: {v}" + (f", {triggered_by[k]} déclenché(s)" if triggered_by.get(k) else "")
+                for k, v in self.report.items()))
         self.db.purge()
-        log.info("Passage terminé en %.0fs : %d deals lus, %d déclenchés, %d doublons, %d alerte(s) envoyée(s)%s. "
-                 "HTTP: %d requêtes, %d bloquées (403).", time.time() - started, stats["deals"], stats["triggered"],
-                 stats["duplicates"], stats["sent"], f", {stats['failed']} échec(s)" if stats["failed"] else "",
-                 self.http.stats["requests"], self.http.stats["blocked"])
+        labels = {VERDICT_TRUE: "✅", VERDICT_INFLATED: "⚠️", VERDICT_UNVERIFIED: "❓"}
+        verdicts = " ".join(f"{labels.get(k, k)} {n}" for k, n in stats["verdicts"].items()) or "aucun"
+        log.info("Passage terminé en %.0fs : %d deals lus, %d déclenchés, %d doublons, verdicts [%s], "
+                 "%d alerte(s) envoyée(s), %d non envoyée(s) (filtrage), %d reportée(s)%s. "
+                 "HTTP: %d requêtes, %d bloquées (403/429). Recherche web : %d requête(s)%s.",
+                 time.time() - started, stats["deals"], stats["triggered"], stats["duplicates"], verdicts,
+                 stats["sent"], stats["filtered"], stats["deferred"],
+                 f", {stats['failed']} échec(s) d'envoi" if stats["failed"] else "",
+                 self.http.stats["requests"], self.http.stats["blocked"], self.web.queries,
+                 " (bloquée)" if self.web.blocked else "")
         return stats
+
+    # ------------------------------------------------------------------ envoi / liens
+    def should_send(self, deal: Deal, v: Verification) -> tuple[bool, str]:
+        ncfg = self.cfg.get("notifications", {})
+        if v.verdict == VERDICT_INFLATED and not ncfg.get("send_inflated_alerts", False):
+            return False, "⚠️ prix gonflé"
+        if v.verdict == VERDICT_UNVERIFIED:
+            community = deal.origin in ncfg.get("community_sources", ["dealabs", "pepper_eu", "reddit",
+                                                                       "camelcamelcamel"])
+            if community and not ncfg.get("send_unverified_alerts_community", True):
+                return False, "❓ non vérifié (source communautaire)"
+            if not community and not ncfg.get("send_unverified_alerts_direct_sites", False):
+                return False, "❓ non vérifié (site marchand direct)"
+        return True, ""
+
+    def resolve_merchant_link(self, deal: Deal) -> None:
+        """Remplace le lien de redirection Pepper (/visit/...) par l'URL directe de la page produit."""
+        lcfg = self.cfg.get("links", {})
+        if not lcfg.get("resolve_pepper_links", True) or "/visit/" not in (deal.merchant_url or ""):
+            return
+        cached = self.db.kv_get("link", deal.merchant_url, float(lcfg.get("cache_hours", 168)))
+        if cached is None:
+            final = ""
+            if hasattr(self.http, "resolve_redirect"):
+                final = self.http.resolve_redirect(deal.merchant_url, float(lcfg.get("timeout_seconds", 8)))
+            cached = {"url": clean_url(final) if final else ""}
+            self.db.kv_put("link", deal.merchant_url, cached)
+        if cached.get("url"):
+            deal.visit_url = deal.merchant_url
+            deal.merchant_url = cached["url"]
+            deal.link_host = url_host(cached["url"]) or deal.link_host
+            deal.asin = deal.asin or extract_asin(cached["url"])
 
 
 # ------------------------------------------------------------------ mode --test
@@ -202,6 +341,9 @@ def simulated_alerts() -> list[Alert]:
     v1 = Verification(verdict=VERDICT_TRUE, median_90=279.0, low_30=259.0, max_90=329.0, history_source="idealo",
                       lowest_elsewhere=239.0, lowest_elsewhere_shop="Boulanger", real_discount_pct=64.5,
                       idealo_url="https://www.idealo.fr/prix/201949755/sony-wh-1000xm5.html",
+                      brand="Sony", brand_status="verified", official_price=379.0,
+                      official_url="https://www.sony.fr/headphones/products/wh-1000xm5", others_count=12,
+                      comparators=["idealo.fr"],
                       notes=["ℹ️ Prix barré gonflé : prix barré 399,99 € > plus bas des 30 derniers jours (259,00 €)"])
 
     inflated = Deal(

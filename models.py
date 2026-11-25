@@ -38,6 +38,12 @@ class Deal:
     expired: bool = False
     price_error_context: bool = False      # vient d'un groupe/topic "erreur de prix"
     displayed_discount_override: Optional[float] = None  # % fourni directement par la source
+    category_hint: str = ""          # catégorie libre (ex. sous-titre Idealo), utilisée pour les mots-clés
+    # prix de référence affichés par le marchand : {"low_30": ..., "median": ..., "usual": ...}
+    merchant_ref: dict = field(default_factory=dict)
+    origin: str = ""                 # nom de la source (clé config) qui a produit le deal
+    brand: str = ""                  # marque explicite fournie par la source (sinon déduite du titre)
+    visit_url: str = ""              # lien de redirection Pepper d'origine (secours si l'URL directe échoue)
 
     # rempli par le pipeline
     price_eur: Optional[float] = None
@@ -79,6 +85,14 @@ class Verification:
     real_discount_pct: Optional[float] = None
     notes: list[str] = field(default_factory=list)
     skipped_idealo_reason: str = ""
+    # vérification stricte (marque / site officiel / multi-marchands)
+    brand: str = ""
+    brand_status: str = ""
+    official_price: Optional[float] = None
+    official_url: str = ""
+    others_count: Optional[int] = None        # marchands indépendants trouvés (hors site source)
+    comparators: list[str] = field(default_factory=list)
+    deferred: bool = False                    # vérification reportée au passage suivant (budget atteint)
 
 
 @dataclass

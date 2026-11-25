@@ -1,9 +1,12 @@
-"""Persistance SQLite (`state.db`) : dédoublonnage, températures, cache Idealo, historique de prix local."""
+"""Persistance SQLite (`state.db`) : dédoublonnage, températures, caches (Idealo, marques, prix officiels,
+comparateurs), historique de prix local, pauses de domaines. Utilisable depuis plusieurs threads."""
 from __future__ import annotations
 
+import functools
 import json
 import sqlite3
 import statistics
+import threading
 import time
 from pathlib import Path
 from typing import Any, Iterable, Optional
@@ -47,17 +50,110 @@ CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT
 );
+CREATE TABLE IF NOT EXISTS brand_cache (
+    brand_key TEXT PRIMARY KEY,
+    ts REAL NOT NULL,
+    status TEXT NOT NULL,
+    official_domain TEXT,
+    payload TEXT
+);
+CREATE TABLE IF NOT EXISTS kv_cache (
+    namespace TEXT NOT NULL,
+    cache_key TEXT NOT NULL,
+    ts REAL NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (namespace, cache_key)
+);
+CREATE TABLE IF NOT EXISTS domain_status (
+    host TEXT PRIMARY KEY,
+    failures INTEGER NOT NULL DEFAULT 0,
+    cooldown_until REAL NOT NULL DEFAULT 0
+);
 """
 
 DAY = 86400.0
 
 
+def _locked(fn):
+    @functools.wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        with self._lock:
+            return fn(self, *args, **kwargs)
+    return wrapper
+
+
+def _synchronized(cls):
+    """Protège toutes les méthodes publiques par un verrou (sources lues en parallèle)."""
+    for name, attr in list(vars(cls).items()):
+        if callable(attr) and not name.startswith("_"):
+            setattr(cls, name, _locked(attr))
+    return cls
+
+
+@_synchronized
 class StateDB:
     def __init__(self, path: str | Path = "state.db"):
         self.path = str(path)
-        self.conn = sqlite3.connect(self.path, timeout=30)
+        self._lock = threading.RLock()
+        self.conn = sqlite3.connect(self.path, timeout=30, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        self.conn.commit()
+
+    # ------------------------------------------------------------ caches génériques
+    def kv_get(self, namespace: str, key: str, max_age_hours: float) -> Optional[Any]:
+        row = self.conn.execute("SELECT ts, payload FROM kv_cache WHERE namespace=? AND cache_key=?",
+                                (namespace, key)).fetchone()
+        if not row or time.time() - row["ts"] > max_age_hours * 3600:
+            return None
+        return json.loads(row["payload"])
+
+    def kv_put(self, namespace: str, key: str, payload: Any) -> None:
+        self.conn.execute(
+            "INSERT INTO kv_cache(namespace, cache_key, ts, payload) VALUES(?,?,?,?) "
+            "ON CONFLICT(namespace, cache_key) DO UPDATE SET ts=excluded.ts, payload=excluded.payload",
+            (namespace, key, time.time(), json.dumps(payload, ensure_ascii=False)))
+        self.conn.commit()
+
+    # ------------------------------------------------------------ marques (cache 30 jours)
+    def brand_get(self, brand_key: str, max_age_days: float = 30) -> Optional[dict]:
+        row = self.conn.execute("SELECT * FROM brand_cache WHERE brand_key=?", (brand_key,)).fetchone()
+        if not row or time.time() - row["ts"] > max_age_days * DAY:
+            return None
+        data = json.loads(row["payload"] or "{}")
+        data.update({"status": row["status"], "official_domain": row["official_domain"] or ""})
+        return data
+
+    def brand_put(self, brand_key: str, status: str, official_domain: str = "", payload: Optional[dict] = None) -> None:
+        self.conn.execute(
+            "INSERT INTO brand_cache(brand_key, ts, status, official_domain, payload) VALUES(?,?,?,?,?) "
+            "ON CONFLICT(brand_key) DO UPDATE SET ts=excluded.ts, status=excluded.status, "
+            "official_domain=excluded.official_domain, payload=excluded.payload",
+            (brand_key, time.time(), status, official_domain, json.dumps(payload or {}, ensure_ascii=False)))
+        self.conn.commit()
+
+    # ------------------------------------------------------------ pause automatique par domaine
+    def domain_cooldown_left(self, host: str, now: Optional[float] = None) -> float:
+        """Minutes de pause restantes pour ce domaine (0 = utilisable)."""
+        row = self.conn.execute("SELECT cooldown_until FROM domain_status WHERE host=?", (host,)).fetchone()
+        left = (row["cooldown_until"] - (now or time.time())) if row else 0
+        return max(0.0, left / 60)
+
+    def domain_failure(self, host: str, threshold: int, minutes: float, now: Optional[float] = None) -> bool:
+        """Compte un 403/429 ; au-delà de `threshold` échecs consécutifs, pause le domaine. Renvoie True si en pause."""
+        now = now or time.time()
+        row = self.conn.execute("SELECT failures FROM domain_status WHERE host=?", (host,)).fetchone()
+        failures = (row["failures"] if row else 0) + 1
+        until = now + minutes * 60 if failures >= threshold else 0
+        self.conn.execute(
+            "INSERT INTO domain_status(host, failures, cooldown_until) VALUES(?,?,?) "
+            "ON CONFLICT(host) DO UPDATE SET failures=excluded.failures, cooldown_until=excluded.cooldown_until",
+            (host, 0 if until else failures, until))
+        self.conn.commit()
+        return bool(until)
+
+    def domain_success(self, host: str) -> None:
+        self.conn.execute("UPDATE domain_status SET failures=0 WHERE host=? AND failures>0", (host,))
         self.conn.commit()
 
     def close(self) -> None:
@@ -80,10 +176,27 @@ class StateDB:
     def mark_initialized(self) -> None:
         self.set_meta("initialized", "1")
 
+    def pause_source(self, name: str, minutes: float, now: Optional[float] = None) -> None:
+        self.set_meta(f"paused_until:{name}", (now or time.time()) + minutes * 60)
+
+    def paused_for(self, name: str, now: Optional[float] = None) -> float:
+        """Minutes de pause restantes (0 si la source n'est pas en pause)."""
+        until = self.get_meta(f"paused_until:{name}")
+        left = float(until) - (now or time.time()) if until else 0
+        return max(0.0, left / 60)
+
+    def is_source_initialized(self, name: str) -> bool:
+        return self.get_meta(f"initialized:{name}") == "1"
+
+    def mark_source_initialized(self, name: str) -> None:
+        self.set_meta(f"initialized:{name}", "1")
+
     def source_due(self, name: str, min_interval_minutes: float, now: Optional[float] = None) -> bool:
+        now = now or time.time()
+        if self.paused_for(name, now) > 0:
+            return False
         if not min_interval_minutes:
             return True
-        now = now or time.time()
         last = self.get_meta(f"last_run:{name}")
         return last is None or now - float(last) >= min_interval_minutes * 60
 
@@ -226,4 +339,6 @@ class StateDB:
         self.conn.execute("DELETE FROM temperature_history WHERE ts < ?", (now - 7 * DAY,))
         self.conn.execute("DELETE FROM idealo_cache WHERE ts < ?", (now - 3 * DAY,))
         self.conn.execute("DELETE FROM price_observations WHERE ts < ?", (now - 120 * DAY,))
+        self.conn.execute("DELETE FROM kv_cache WHERE ts < ?", (now - 7 * DAY,))
+        self.conn.execute("DELETE FROM brand_cache WHERE ts < ?", (now - 31 * DAY,))
         self.conn.commit()

@@ -40,6 +40,9 @@ def make_bot(cfg, tmp_path, http, silent=False):
     src["reddit"]["enabled"] = False
     cfg["web_search"]["enabled"] = False         # vérification stricte testée à part (test_strict_verification)
     cfg["sites_catalog"]["sites"] = []           # moteurs du catalogue testés à part (test_catalog_engines)
+    cfg["trusted_dtc_brands"]["enabled"] = False  # testés à part (test_new_sources)
+    for name in ("courir", "galerieslafayette"):
+        src[name]["enabled"] = False
     cfg["comparators"]["geizhals"]["enabled"] = False
     db = StateDB(tmp_path / "state.db")
     notifier = CaptureNotifier()

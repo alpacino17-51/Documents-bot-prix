@@ -61,6 +61,8 @@ def format_alert(alert: Alert, test: bool = False) -> str:
     if v.brand:
         lines.append(f"🏷 <b>Marque :</b> {e(v.brand)} ({e(BRAND_LABELS.get(v.brand_status, v.brand_status))})")
     lines.append(f"{flag} <b>Pays du site :</b> {e(d.site_country or '—')}")
+    if d.sizes:
+        lines.append(f"📏 <b>Tailles en stock :</b> {e(', '.join(d.sizes))}")
 
     price = money(d.price, d.currency)
     if d.currency != "EUR" and d.price_eur is not None:
@@ -97,7 +99,7 @@ def format_alert(alert: Alert, test: bool = False) -> str:
         lines.append(f"👥 <b>Marchands comparés :</b> {v.others_count} autre(s) marchand(s){via}")
 
     lines.append("")
-    lines.append(f"🧾 <b>Verdict : {e(VERDICT_LABELS.get(v.verdict, v.verdict))}</b>")
+    lines.append(f"🧾 <b>Verdict : {e(v.label_override or VERDICT_LABELS.get(v.verdict, v.verdict))}</b>")
     for note in v.notes[:5]:
         lines.append(f"   • {e(note)}")
     lines.append(f"🎯 <b>Critère(s) :</b> {e(' | '.join(alert.triggers))}")

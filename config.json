@@ -331,6 +331,30 @@
       ]
     },
 
+    "courir": {
+      "enabled": true,
+      "min_interval_minutes": 15,
+      "base_url": "https://www.courir.com",
+      "page_size": 40,
+      "pages": 3,
+      "outlet_allow_no_strike_for_resale_brands": true,
+      "_note": "Outlet : articles souvent sans prix barré. Pour les marques de filters.resale_brands, ils sont envoyés au vérificateur multi-marchands (comparaison au prix du marché). La page /fr/c/promotions/ est une page d'aiguillage sans produits.",
+      "page_urls": ["https://www.courir.com/fr/c/outlet/", "https://www.courir.com/fr/c/soldes/"]
+    },
+
+    "galerieslafayette": {
+      "enabled": true,
+      "min_interval_minutes": 15,
+      "base_url": "https://www.galerieslafayette.com",
+      "merchant_filter": "galeries lafayette",
+      "_note": "Site 100 % application JavaScript (produits via API interne non utilisée) : deals GL relayés par Dealabs + pages du site si elles exposent des produits + offres GL sur Idealo. Vérification complète (marketplace tierce).",
+      "dealabs_search_urls": ["https://www.dealabs.com/search?q=galeries+lafayette&sortBy=new"],
+      "page_urls": [],
+      "_page_urls_note": "Les pages du site renvoient une coquille JavaScript ou une page Cloudflare : laissé vide.",
+      "idealo_shop_patterns": ["galeries lafayette", "galerieslafayette"],
+      "idealo_countries": ["fr"]
+    },
+
     "idealo_de": {
       "enabled": true,
       "_note": "Comparateur de secours (vérification uniquement), utilisé quand idealo.fr ne trouve pas le produit.",
@@ -355,6 +379,26 @@
       "min_title_similarity": 0.55,
       "max_candidates": 8
     }
+  },
+
+  "trusted_dtc_brands": {
+    "_note": "Marques indépendantes vendues uniquement sur leur site Shopify : pas de vérification de marque ni d'exclusivité ; verdict fondé sur l'historique local de state.db.",
+    "enabled": true,
+    "min_interval_minutes": 30,
+    "max_pages": 10,
+    "wanted_sizes": [],
+    "min_drop_pct": 35,
+    "intro_min_compare_at_pct": 50,
+    "min_history_points": 2,
+    "min_history_days": 3,
+    "send_intro_alerts": true,
+    "silent_first_run": false,
+    "brands": [
+      {"id": "divinbydivin", "name": "DivinByDivin", "base_url": "https://divinbydivin.shop",
+       "collections": ["/collections/all"]},
+      {"id": "davril", "name": "Davril Supply", "base_url": "https://davril.com",
+       "collections": ["/collections/all", "/collections/special-offer", "/collections/final-chapter"]}
+    ]
   },
 
   "sites_catalog": {
@@ -544,7 +588,8 @@
     ],
     "resale_brands": [
       "Lego", "Apple", "Dyson", "Pokémon", "Nintendo", "Sony", "DJI", "GoPro", "Garmin", "Bose",
-      "Nike Jordan", "Nike Dunk", "New Balance", "Le Creuset", "KitchenAid", "Thermomix"
+      "Nike Jordan", "Nike Dunk", "New Balance", "Le Creuset", "KitchenAid", "Thermomix",
+      "Asics", "Salomon", "Adidas Samba", "Adidas Spezial", "Samba OG", "Handball Spezial", "UGG", "Air Jordan"
     ],
     "fashion_category_keywords": [
       "mode", "vetements", "chaussures", "fashion", "moda", "abbigliamento", "bekleidung", "accessoires de mode"

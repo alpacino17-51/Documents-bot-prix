@@ -16,7 +16,7 @@ from typing import Optional
 from brand_checker import BLOCKED, FAKE, REAL, UNKNOWN, VERIFIED, BrandChecker, extract_brand
 from comparators import MultiComparator
 from filters import is_fashion
-from models import VERDICT_INFLATED, VERDICT_TRUE, VERDICT_UNVERIFIED, Deal, Verification
+from models import VERDICT_DTC_INTRO, VERDICT_INFLATED, VERDICT_TRUE, VERDICT_UNVERIFIED, Deal, Verification
 from official_price import OfficialPriceFinder
 from utils import pct_below, url_host
 
@@ -250,14 +250,39 @@ class Verifier:
             chosen = {**chosen, "low_30": ref["low_30"]}     # le plus bas 30 j légal affiché par le marchand
         return chosen_name, chosen
 
+    # ------------------------------------------------------------------ marques indépendantes
+    @staticmethod
+    def verify_trusted_dtc(deal: Deal) -> Verification:
+        """Marque de `trusted_dtc_brands` : pas de contrôle de marque, ni d'exclusivité, ni de comparateur (la marque
+        ne vend que sur son site) ; le verdict vient de l'historique local calculé par sources/dtc_shopify.py."""
+        info = deal.dtc or {}
+        v = Verification(brand=deal.brand, brand_status="verified", history_source="local",
+                         skipped_idealo_reason="marque indépendante vendue uniquement sur son site",
+                         real_discount_pct=info.get("drop_pct"))
+        if info.get("kind") == "verified":
+            v.verdict = VERDICT_TRUE
+            v.label_override = "✅ Baisse vérifiée (historique local)"
+            v.median_90 = info.get("reference")
+            v.notes = [f"Prix habituel relevé : {info.get('reference'):.2f} € (médiane de {info.get('points')} relevés "
+                       f"sur {info.get('days')} j)".replace(".", ",", 1),
+                       f"Plus bas relevé avant aujourd'hui : {info.get('lowest'):.2f} €".replace(".", ",", 1)]
+        else:
+            v.verdict = VERDICT_DTC_INTRO
+            v.notes = [f"Prix barré affiché par la marque : {info.get('compare_at', 0):.2f} €".replace(".", ",", 1),
+                       "Historique local en construction : la baisse n'est pas encore confirmée par nos relevés"]
+        return v
+
     # ------------------------------------------------------------------ pipeline
     def verify(self, deal: Deal) -> Verification:
+        if deal.trusted_dtc:
+            return self.verify_trusted_dtc(deal)
         v = Verification()
         if self._time_out():
             v.deferred = True
             return v
         host = source_host(deal)
-        fashion = is_fashion(deal, self.filters_cfg)
+        # outlet sans prix barré (Courir) : comparaison au prix du marché, y compris pour la mode
+        fashion = is_fashion(deal, self.filters_cfg) and not deal.force_market_compare
 
         # Étape A — marque
         brand = extract_brand(deal, self.brands_cfg, self.resale)

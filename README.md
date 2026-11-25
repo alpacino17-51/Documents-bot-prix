@@ -118,6 +118,26 @@ simplement mise en pause. Beaucoup de ces enseignes restent couvertes indirectem
 Chaque site a son `enabled`, son `min_interval_minutes` et peut avoir son propre `min_displayed_discount_pct`.
 Les deals déclenchés sont vérifiés par ordre de priorité : sources communautaires d'abord, puis plus forte remise.
 
+## 2 ter. Courir, Galeries Lafayette et marques indépendantes
+
+- **Courir** (`sources/courir.py`) : pages Outlet / Soldes (données `data-gtm` des vignettes, pagination
+  `start`/`sz`, ≤ 200 €). Les articles Outlet **sans prix barré** d'une marque de `filters.resale_brands`
+  (Asics, Salomon, Adidas Samba/Spezial, UGG, Nike Jordan/Dunk, New Balance…) sont quand même envoyés au
+  vérificateur, qui les compare au prix du marché (Idealo + recherche web).
+- **Galeries Lafayette** (`sources/galerieslafayette.py`) : le site est une application JavaScript (API interne non
+  utilisée) ; on lit les deals Galeries Lafayette publiés sur Dealabs (+ offres GL sur Idealo). Vérification
+  complète conservée (marketplace tierce).
+- **Marques indépendantes** (`sources/dtc_shopify.py`, section `trusted_dtc_brands`) : DivinByDivin et Davril Supply.
+  Tout le catalogue Shopify (`/products.json`, paginé, + collections ; repli HTML) est relevé toutes les 30 min et
+  **chaque prix est enregistré** dans `state.db` (`dtc:<domaine>:<id>`, conservé 400 jours). Pas de contrôle de
+  marque ni d'exclusivité. Alertes :
+  - ✅ **Baisse vérifiée (historique local)** : historique suffisant (≥ 2 relevés sur ≥ 3 jours, ou prix plus élevé
+    déjà vu) et prix ≥ 35 % sous la médiane relevée, au plus bas jamais vu ;
+  - ℹ️ **Promo directe (historique en cours)** : historique insuffisant mais prix barré Shopify ≥ 50 % ;
+  - rien si le prix n'a jamais bougé depuis le premier relevé.
+  Variantes épuisées ignorées, `wanted_sizes` pour filtrer les tailles, tailles en stock affichées dans l'alerte.
+  Une nouvelle baisse du même article redonne une alerte (la clé de dédoublonnage contient le prix).
+
 ## 3 bis. Vérification stricte anti « faux bons plans »
 
 Pour chaque deal déclenché (toutes catégories, mode comprise) :

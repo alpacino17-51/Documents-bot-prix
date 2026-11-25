@@ -88,6 +88,11 @@ def evaluate_triggers(deal: Deal, triggers_cfg: dict, velocity: Optional[float],
         brands = find_keywords(deal.title, resale_brands)
         if brands:
             found.append(f"Réduction affichée {disc:.0f} % (≥ {resale_min:.0f} %, marque revente « {brands[0]} »)")
+    elif disc is None and deal.allow_no_strike and resale_brands:
+        # outlet sans prix barré (ex. Courir) : on laisse le vérificateur comparer au prix du marché
+        brands = find_keywords(f"{deal.brand} {deal.title}", resale_brands)
+        if brands:
+            found.append(f"Outlet sans prix barré — marque revente « {brands[0]} » (comparaison au prix du marché)")
 
     vcfg = triggers_cfg.get("velocity", {})
     if vcfg.get("enabled", True) and velocity is not None and deal.temperature is not None:

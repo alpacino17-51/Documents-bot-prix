@@ -183,6 +183,7 @@ def test_bot_runs_catalog_source_with_its_own_interval_and_threshold(cfg, tmp_pa
     c["sites_catalog"]["sites"] = [site]
     c["general"]["silent_first_run"] = False
     c["web_search"]["enabled"] = False
+    c["trusted_dtc_brands"]["enabled"] = False
     http = FakeHttp({"asphaltgold.com/collections/sale/products.json": json.loads(read_fixture("shopify_sale.json"))})
     db = StateDB(tmp_path / "c.db")
 

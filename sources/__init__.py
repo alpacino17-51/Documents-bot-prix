@@ -3,9 +3,12 @@ et l'ajouter à FEED_SOURCES avec la clé de sa section dans config.json (source
 from sources.base import BaseSource
 from sources.boulanger import BoulangerSource
 from sources.camel import CamelSource
+from sources.courir import CourirSource
 from sources.dealabs import DealabsSource
 from sources.decathlon import DecathlonSource
+from sources.dtc_shopify import DTCShopifySource
 from sources.fnac import FnacSource
+from sources.galerieslafayette import GaleriesLafayetteSource
 from sources.idealo import IdealoSource
 from sources.idealo_drops import IdealoDropsSource
 from sources.pepper_eu import PepperEUSource
@@ -22,11 +25,16 @@ FEED_SOURCES: dict[str, type[BaseSource]] = {
     "boulanger": BoulangerSource,
     "fnac": FnacSource,
     "zalando": ZalandoSource,
+    "courir": CourirSource,
+    "galerieslafayette": GaleriesLafayetteSource,
+    # section de premier niveau `trusted_dtc_brands` (et non sources.<nom>)
+    "trusted_dtc_brands": DTCShopifySource,
 }
 
 #: sources présentes avant l'ajout du « premier passage silencieux par source »
 LEGACY_SOURCES = ("dealabs", "pepper_eu", "camelcamelcamel", "reddit")
 
-__all__ = ["BaseSource", "FEED_SOURCES", "LEGACY_SOURCES", "BoulangerSource", "CamelSource", "DealabsSource",
+__all__ = ["BaseSource", "FEED_SOURCES", "LEGACY_SOURCES", "BoulangerSource", "CamelSource", "CourirSource", "DTCShopifySource",
+           "GaleriesLafayetteSource", "DealabsSource",
            "DecathlonSource", "FnacSource", "IdealoDropsSource", "IdealoSource", "PepperEUSource", "RedditSource",
            "ZalandoSource"]

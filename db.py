@@ -333,12 +333,26 @@ class StateDB:
             "low_30": min(prices_30) if prices_30 else None,
         }
 
+    def price_history(self, product_key: str, days: Optional[float] = None,
+                      now: Optional[float] = None) -> list[tuple[float, float]]:
+        """Relevés (horodatage, prix) d'un produit, du plus ancien au plus récent."""
+        now = now or time.time()
+        since = now - days * DAY if days else 0
+        rows = self.conn.execute(
+            "SELECT ts, price FROM price_observations WHERE product_key=? AND ts>=? ORDER BY ts",
+            (product_key, since)).fetchall()
+        return [(r["ts"], r["price"]) for r in rows]
+
     # ------------------------------------------------------------ entretien
     def purge(self, now: Optional[float] = None) -> None:
         now = now or time.time()
         self.conn.execute("DELETE FROM temperature_history WHERE ts < ?", (now - 7 * DAY,))
         self.conn.execute("DELETE FROM idealo_cache WHERE ts < ?", (now - 3 * DAY,))
-        self.conn.execute("DELETE FROM price_observations WHERE ts < ?", (now - 120 * DAY,))
+        # historique des marques indépendantes (dtc:*) conservé plus longtemps : c'est leur seule référence
+        self.conn.execute("DELETE FROM price_observations WHERE ts < ? AND product_key NOT LIKE 'dtc:%'",
+                          (now - 120 * DAY,))
+        self.conn.execute("DELETE FROM price_observations WHERE ts < ? AND product_key LIKE 'dtc:%'",
+                          (now - 400 * DAY,))
         self.conn.execute("DELETE FROM kv_cache WHERE ts < ?", (now - 7 * DAY,))
         self.conn.execute("DELETE FROM brand_cache WHERE ts < ?", (now - 31 * DAY,))
         self.conn.commit()

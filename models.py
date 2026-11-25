@@ -7,11 +7,13 @@ from typing import Optional
 VERDICT_TRUE = "true_deal"
 VERDICT_INFLATED = "inflated"
 VERDICT_UNVERIFIED = "unverified"
+VERDICT_DTC_INTRO = "dtc_intro"         # marque indépendante : promo affichée, historique local encore en construction
 
 VERDICT_LABELS = {
     VERDICT_TRUE: "✅ Vraie affaire",
     VERDICT_INFLATED: "⚠️ Prix gonflé / à vérifier",
     VERDICT_UNVERIFIED: "❓ Non vérifié",
+    VERDICT_DTC_INTRO: "ℹ️ Promo directe (historique en cours)",
 }
 
 
@@ -44,6 +46,13 @@ class Deal:
     origin: str = ""                 # nom de la source (clé config) qui a produit le deal
     brand: str = ""                  # marque explicite fournie par la source (sinon déduite du titre)
     visit_url: str = ""              # lien de redirection Pepper d'origine (secours si l'URL directe échoue)
+    # outlet sans prix barré (Courir) : déclenchable pour les marques de revente, comparé au prix du marché
+    allow_no_strike: bool = False
+    force_market_compare: bool = False
+    # marques indépendantes de confiance (trusted_dtc_brands) : verdict fondé sur l'historique local uniquement
+    trusted_dtc: bool = False
+    dtc: dict = field(default_factory=dict)
+    sizes: list = field(default_factory=list)     # tailles encore en stock
 
     # rempli par le pipeline
     price_eur: Optional[float] = None
@@ -93,6 +102,7 @@ class Verification:
     others_count: Optional[int] = None        # marchands indépendants trouvés (hors site source)
     comparators: list[str] = field(default_factory=list)
     deferred: bool = False                    # vérification reportée au passage suivant (budget atteint)
+    label_override: str = ""                  # libellé de verdict spécifique (ex. « ✅ Baisse vérifiée (historique local) »)
 
 
 @dataclass

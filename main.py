@@ -26,7 +26,8 @@ from official_price import OfficialPriceFinder
 from web_search import WebSearch
 from filters import category_ok, evaluate_triggers, price_ok
 from http_client import HttpClient
-from models import VERDICT_INFLATED, VERDICT_TRUE, VERDICT_UNVERIFIED, Alert, Deal, Verification
+from models import (VERDICT_DTC_INTRO, VERDICT_INFLATED, VERDICT_TRUE, VERDICT_UNVERIFIED, Alert, Deal,
+                    Verification)
 from notifier import ConsoleNotifier, TelegramNotifier
 from settings import ROOT, load_config, load_dotenv_if_present, load_secrets
 from sources import FEED_SOURCES, LEGACY_SOURCES, CamelSource, IdealoSource
@@ -61,6 +62,9 @@ def setup_logging(level: str, to_file: bool) -> None:
 
 def dedup_keys(deal: Deal) -> list[str]:
     keys = [f"deal:{deal.key}"]
+    if deal.trusted_dtc:
+        # marque indépendante : la clé contient le prix -> une NOUVELLE baisse du même article redonne une alerte
+        return keys
     if deal.url:
         keys.append("url:" + normalize_url(deal.url))
     if deal.merchant_url and "/visit/" not in deal.merchant_url:
@@ -75,6 +79,14 @@ def dedup_keys(deal: Deal) -> list[str]:
     return list(dict.fromkeys(keys))
 
 
+def dtc_trigger(deal: Deal) -> str:
+    info = deal.dtc or {}
+    if info.get("kind") == "verified":
+        return (f"Baisse de {info.get('drop_pct', 0):.0f} % vs prix habituel relevé "
+                f"({info.get('points')} relevés sur {info.get('days')} j)")
+    return f"Promo affichée -{info.get('drop_pct', 0):.0f} % (historique local en construction)"
+
+
 class Bot:
     def __init__(self, cfg: dict, secrets, db: StateDB, notifier, http: HttpClient | None = None):
         self.cfg = cfg
@@ -86,7 +98,8 @@ class Bot:
         src_cfg = cfg.get("sources", {})
         self.sources = []
         for name, cls in FEED_SOURCES.items():
-            src = cls(src_cfg.get(name, {}), self.http, general)
+            scfg = src_cfg[name] if name in src_cfg else cfg.get(name, {})     # ex. trusted_dtc_brands
+            src = cls(scfg, self.http, general)
             src.db = db
             self.sources.append(src)
         # sites pilotés par `sites_catalog` (moteurs réutilisables)
@@ -228,7 +241,10 @@ class Bot:
                     max_window_min=float(vel_cfg.get("max_window_minutes", 60)),
                     published_at=deal.published_at if vel_cfg.get("use_publication_time", True) else None,
                     current_temp=deal.temperature)
-            triggers = evaluate_triggers(deal, self._triggers_for(deal, triggers_cfg), velocity, resale_brands)
+            if deal.trusted_dtc:
+                triggers = [dtc_trigger(deal)]        # décision déjà prise par l'historique local (dtc_shopify)
+            else:
+                triggers = evaluate_triggers(deal, self._triggers_for(deal, triggers_cfg), velocity, resale_brands)
             if not triggers:
                 continue
             stats["triggered"] += 1
@@ -244,7 +260,10 @@ class Bot:
             seen_this_run.update(keys)
 
             # premier passage (global, ou d'une source nouvellement activée) : on mémorise sans alerter
-            if bootstrap or (silent and deal.origin and not self.db.is_source_initialized(deal.origin)):
+            dtc_silent = self.cfg.get("trusted_dtc_brands", {}).get("silent_first_run", False)
+            source_silent = silent and (not deal.trusted_dtc or dtc_silent)
+            if (bootstrap and (not deal.trusted_dtc or dtc_silent)) or (
+                    source_silent and deal.origin and not self.db.is_source_initialized(deal.origin)):
                 self.db.record_alert(keys, deal_key=deal.key, source=deal.source, title=deal.title, url=deal.url,
                                      price_eur=deal.price_eur, verdict="bootstrap", sent=False)
                 stats["bootstrap"] += 1
@@ -303,7 +322,7 @@ class Bot:
                 f"{k}: {v}" + (f", {triggered_by[k]} déclenché(s)" if triggered_by.get(k) else "")
                 for k, v in self.report.items()))
         self.db.purge()
-        labels = {VERDICT_TRUE: "✅", VERDICT_INFLATED: "⚠️", VERDICT_UNVERIFIED: "❓"}
+        labels = {VERDICT_TRUE: "✅", VERDICT_INFLATED: "⚠️", VERDICT_UNVERIFIED: "❓", VERDICT_DTC_INTRO: "ℹ️"}
         verdicts = " ".join(f"{labels.get(k, k)} {n}" for k, n in stats["verdicts"].items()) or "aucun"
         log.info("Passage terminé en %.0fs : %d deals lus, %d déclenchés, %d doublons, verdicts [%s], "
                  "%d alerte(s) envoyée(s), %d non envoyée(s) (filtrage), %d reportée(s)%s. "
@@ -318,6 +337,9 @@ class Bot:
     # ------------------------------------------------------------------ envoi / liens
     def should_send(self, deal: Deal, v: Verification) -> tuple[bool, str]:
         ncfg = self.cfg.get("notifications", {})
+        if v.verdict == VERDICT_DTC_INTRO:
+            ok = self.cfg.get("trusted_dtc_brands", {}).get("send_intro_alerts", True)
+            return ok, "" if ok else "ℹ️ promo directe (alertes d'introduction désactivées)"
         if v.verdict == VERDICT_INFLATED and not ncfg.get("send_inflated_alerts", False):
             return False, "⚠️ prix gonflé"
         if v.verdict == VERDICT_UNVERIFIED:

@@ -42,10 +42,12 @@ def catalog_engines() -> dict[str, type[CatalogSource]]:
     # imports tardifs : les moteurs importent eux-mêmes `CatalogSource`
     from sources.comparators_drops import GeizhalsDealsSource, IdealoDealsSource
     from sources.galaxus import GalaxusSource
+    from sources.retailer_generic import RetailerSource
     from sources.sneakers_generic import SneakersGenericSource
     from sources.tradeinn import TradeinnSource
 
     return {
+        "retailer": RetailerSource,
         "idealo_deals": IdealoDealsSource,
         "geizhals_deals": GeizhalsDealsSource,
         "tradeinn": TradeinnSource,
@@ -67,6 +69,8 @@ def build_catalog_sources(cfg: dict, http, general: dict, reserved: set[str]) ->
     seen: set[str] = set()
     for site in catalog.get("sites", []):
         sid, engine = site.get("id"), site.get("engine")
+        if not sid and not engine:
+            continue            # entrée de commentaire (ex. {"_lot3": "..."})
         if not sid or sid in reserved or sid in seen:
             log.warning("sites_catalog : id manquant ou en double (%s) — entrée ignorée", sid)
             continue

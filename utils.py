@@ -69,7 +69,8 @@ CURRENCY_SYMBOLS = {"€": "EUR", "£": "GBP", "$": "USD", "eur": "EUR", "euro":
 
 _NUM = r"\d{1,3}(?:[   .,]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?"
 _CUR = r"€|£|\$|eur(?:os?)?\b|gbp\b|usd\b|chf\b|pln\b|zł"
-_PRICE_AFTER = re.compile(rf"(?P<num>{_NUM})\s*(?P<cur>{_CUR})", re.I)
+# (?<![\w.,]) : un prix ne commence pas au milieu d'une référence (« 5KSM175 299,00 € » ≠ 175 299 €)
+_PRICE_AFTER = re.compile(rf"(?<![\w.,])(?P<num>{_NUM})\s*(?P<cur>{_CUR})", re.I)
 _PRICE_BEFORE = re.compile(rf"(?P<cur>{_CUR})\s*(?P<num>{_NUM})", re.I)
 
 
@@ -105,11 +106,15 @@ def _to_float(num: str) -> Optional[float]:
         return None
 
 
-def find_prices(text: str) -> list[tuple[float, str]]:
-    """Toutes les valeurs monétaires accompagnées d'une devise, dans l'ordre d'apparition."""
-    if not text:
-        return []
-    text = html_lib.unescape(text)
+def normalize_price_text(text: str) -> str:
+    """Recolle les prix éclatés par le HTML : « 0 , 99 € » -> « 0,99 € » ; « 13 €01 » / « 339€ 00 » -> « 339,00 € »
+    (la partie entière ne doit pas déjà avoir de décimales : « 29,99 € 12 avis » reste intact)."""
+    text = re.sub(r"(\d)\s+,\s*(\d{2})\s*(€)", r"\1,\2 \3", text)
+    return re.sub(r"(?<![\d.,])(\d{1,4})\s?€\s?(\d{2})(?!\d)", r"\1,\2 €", text)
+
+
+def find_price_spans(text: str) -> list[tuple[int, float, str]]:
+    """(position, valeur, devise) de chaque prix du texte (déjà normalisé par normalize_price_text)."""
     hits: list[tuple[int, float, str]] = []
     taken: list[tuple[int, int]] = []
     for rx in (_PRICE_AFTER, _PRICE_BEFORE):
@@ -120,11 +125,18 @@ def find_prices(text: str) -> list[tuple[float, str]]:
             value = _to_float(m.group("num"))
             if value is None:
                 continue
-            cur = CURRENCY_SYMBOLS.get(m.group("cur").lower(), "EUR")
             taken.append(span)
-            hits.append((span[0], value, cur))
+            hits.append((span[0], value, CURRENCY_SYMBOLS.get(m.group("cur").lower(), "EUR")))
     hits.sort()
-    return [(v, c) for _, v, c in hits]
+    return hits
+
+
+def find_prices(text: str) -> list[tuple[float, str]]:
+    """Toutes les valeurs monétaires accompagnées d'une devise, dans l'ordre d'apparition."""
+    if not text:
+        return []
+    text = normalize_price_text(html_lib.unescape(text))
+    return [(v, c) for _, v, c in find_price_spans(text)]
 
 
 def parse_price(text, default_currency: Optional[str] = None) -> tuple[Optional[float], Optional[str]]:

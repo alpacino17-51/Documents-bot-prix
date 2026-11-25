@@ -21,7 +21,7 @@ from http_client import FetchError
 from models import Deal
 from sources.catalog import CatalogSource
 from sources.merchant_common import absolute, jsonld_products, make_deal, sort_by_discount
-from utils import find_prices, normalize_text
+from utils import find_price_spans, find_prices, normalize_price_text, normalize_text
 
 _MODEL_CODE = re.compile(r"^[A-Z0-9]{2,}[-_ ]?[A-Z0-9]*\d[A-Z0-9-]*$", re.I)
 
@@ -112,34 +112,119 @@ def parse_hypernova(html: str, base_url: str, source: str, path_prefix: str = "/
 
 # ------------------------------------------------------------------ vignettes HTML
 
+_ORIGINAL_LABELS = re.compile(r"(?:à l'origine|a l'origine|prix d'origine|prix conseill[ée]|prix initial|pvc|uvp|"
+                              r"prix de r[ée]f[ée]rence|au lieu de|prix barr[ée]|prix habituel|ancien prix|statt|"
+                              r"prix public|rrp|was)\s*:?\s*$", re.I)
+_LOW30_LABELS = re.compile(r"(?:dernier prix le plus bas|prix le plus bas (?:des|sur les) 30|plus bas prix)\s*:?\s*$",
+                           re.I)
+_STRIKE_SELECTOR = ("s, del, strike, [class*=strike], [class*=Strike], [class*=old-price], [class*=oldPrice], "
+                    "[class*=price-old], [class*=barre], [class*=crossed], [class*=was-price], [class*=line-through], "
+                    "[class*=regular-price], [class*=price--before], [class*=initial-price], [class*=cut-price], "
+                    "[class*=price--old], [class*=previous-price]")
+# montants qui ne sont pas un prix de vente : remise, bon d'achat, seuil (« dès 59 € »)
+_NOT_A_PRICE_AFTER = re.compile(r"^\s*(?:de remise|de réduction|de reduction|d'économie|d'economie|offerts?|"
+                                r"remboursés?|rembourses?|de bon|en bon|d'achat|de cagnotte|cagnottés?)", re.I)
+_NOT_A_PRICE_BEFORE = re.compile(r"(?:dès|jusqu'à|jusqu'a|économisez|economisez|soit)\s*$", re.I)
+_TITLE_NOISE = re.compile(r"(?:\b(?:offre|exclusif|nouveau|new|deal|promo|en stock|ajouter au panier|baisse de prix|"
+                          r"disponible en plusieurs tailles)\b|\btailles? disponibles?\b.*$|"
+                          r"\b(?:à l'origine|a l'origine|dernier prix le plus bas|prix promo jusqu'au [\d/]+ inclus)\b\s*:?|"
+                          r"\b(?:livraison|vendu par)\b.*$|\d+(?:[.,]\d)?\s?/\s?5|\(\d+\)|\b\d+ avis\b|/\s?pce\b|"
+                          r"\ben [\w-]+ : (?:devant|dos|vue)\b.*$|\bà partir de\b|\bde remise\b.*$)", re.I)
+
+
+def card_prices(card) -> tuple[Optional[float], Optional[float], Optional[float]]:
+    """(prix actuel, prix barré, plus bas 30 j) d'une vignette, d'après les libellés et les éléments barrés."""
+    text = normalize_price_text(card.get_text(" ", strip=True))
+    spans = find_price_spans(text)
+    if not spans:
+        return None, None, None
+    struck: set[float] = set()
+    for el in card.select(_STRIKE_SELECTOR):
+        struck.update(v for v, _ in find_prices(el.get_text(" ", strip=True)))
+    current = original = low30 = None
+    plain: list[float] = []
+    for pos, value, _ in spans:
+        before = text[max(0, pos - 45):pos]
+        after = text[pos:pos + 60]
+        after = after[after.find("€") + 1:] if "€" in after else ""
+        if _NOT_A_PRICE_BEFORE.search(before) or _NOT_A_PRICE_AFTER.search(after):
+            continue                   # « 400 € de remise », « dès 59 € » : pas un prix de vente
+        if _LOW30_LABELS.search(before):
+            low30 = low30 or value
+        elif _ORIGINAL_LABELS.search(before) or value in struck:
+            original = original or value
+        else:
+            plain.append(value)
+    if plain:
+        current = plain[0]
+    elif struck and len(spans) > 1:
+        current = min(v for _, v, _ in spans)
+    if original is None and len(plain) > 1 and max(plain) > plain[0] and not low30:
+        original = max(plain)          # sans libellé : le prix le plus haut de la vignette est le prix barré
+    if current is not None and original is not None and original <= current:
+        original = None
+    return current, original, low30
+
+
+def clean_card_title(text: str) -> str:
+    text = normalize_price_text(text)
+    text = re.sub(r"(?<![\w.,])\d{1,3}(?:[  .]\d{3})*(?:[.,]\d{1,2})?\s*(?:€|eur\b)", " ", text, flags=re.I)
+    text = re.sub(r"(?:jusqu'à\s*)?-\s?\d{1,2}\s?%", " ", text, flags=re.I)
+    text = _TITLE_NOISE.sub(" ", text)
+    text = re.sub(r"\s*\|\s*", " ", text)
+    return re.sub(r"\s+", " ", text).strip(" -–|·")
+
+
 def parse_cards(html: str, base_url: str, source: str, link_contains: str = "/p/", category: str = "Mode",
-                max_depth: int = 8) -> list[Deal]:
-    """Pour chaque lien produit, remonte jusqu'au bloc qui contient ses prix (prix actuel = le plus bas,
-    prix barré = le plus haut), sans données structurées."""
+                max_depth: int = 8, link_regex: Optional[str] = None) -> list[Deal]:
+    """Pour chaque lien produit, remonte jusqu'au bloc qui contient ses prix, puis lit prix actuel / prix barré /
+    plus bas 30 j grâce aux libellés (« À l'origine », « PVC », « Dernier prix le plus bas »...) et aux éléments
+    barrés. Sans données structurées : dernier recours."""
     soup = BeautifulSoup(html, "lxml")
+    rx = re.compile(link_regex) if link_regex else None
+
+    def is_product(href: str) -> bool:
+        return bool(href) and (rx.search(href) if rx else link_contains in href)
+
     deals: dict[str, Deal] = {}
-    for a in soup.select(f"a[href*='{link_contains}']"):
-        url = absolute(a.get("href", "").split("?")[0].split("#")[0], base_url)
+    for a in soup.find_all("a", href=True):
+        href = a["href"].strip()
+        if not is_product(href) or href.startswith(("javascript", "#", "mailto")):
+            continue
+        url = absolute(href.split("?")[0].split("#")[0], base_url)
         if url in deals:
             continue
-        card, prices = a, []
+        card, current = a, None
         for _ in range(max_depth):
             card = card.parent
             if card is None or card.name in ("body", "html"):
+                card = None
                 break
-            prices = [v for v, _ in find_prices(card.get_text(" ", strip=True))]
-            if prices:
+            if find_prices(card.get_text(" ", strip=True)):
                 break
-        if not prices or card is None or len(card.select(f"a[href*='{link_contains}']")) > 3:
-            continue        # bloc trop large (plusieurs produits) : on n'invente pas d'association
-        texts = [t.get_text(" ", strip=True) for t in card.select(f"a[href*='{link_contains}']")]
+        if card is None:
+            continue
+        product_links = {absolute(x["href"].split("?")[0].split("#")[0], base_url)
+                         for x in card.find_all("a", href=True) if is_product(x["href"])}
+        if len(product_links) > 1:
+            continue        # bloc qui contient plusieurs produits : association prix/produit incertaine
+        current, original, low30 = card_prices(card)
+        if current is None:
+            continue
+        candidates = [x.get("title") or x.get_text(" ", strip=True) for x in card.find_all("a", href=True)
+                      if is_product(x["href"])]
         img = card.find("img", alt=True)
-        title = max(texts + ([img["alt"]] if img else []), key=len, default="")
-        price = min(prices)
-        original = max(prices) if max(prices) > price else None
+        if img is not None:
+            candidates.append(img["alt"])
+        cleaned = [clean_card_title(c) for c in candidates if c]
+        cleaned = [c for c in cleaned if len(c) >= 6 and len(c.split()) >= 2]
+        if not cleaned:
+            continue
+        title = max(cleaned, key=len)[:200]
         pct = re.search(r"-\s?(\d{1,2})\s?%", card.get_text(" ", strip=True))
-        d = make_deal(source, source, title, url, price, original, float(pct.group(1)) if pct else None,
-                      source_id=url, category=category)
+        d = make_deal(source, source, title, url, current, original,
+                      float(pct.group(1)) if (pct and original is None) else None, source_id=url, category=category,
+                      merchant_ref={"low_30": low30} if low30 else None)
         if d:
             deals[url] = d
     return list(deals.values())
@@ -194,7 +279,8 @@ class SneakersGenericSource(CatalogSource):
                             d.brand = p["brand"]
                             found.append(d)
                 else:
-                    found = parse_cards(html, base, self.name, self.cfg.get("link_contains", "/p/"), category)
+                    found = parse_cards(html, base, self.name, self.cfg.get("link_contains", "/p/"), category,
+                                        link_regex=self.cfg.get("link_regex"))
                 for d in found:
                     deals.setdefault(d.source_id, d)
 

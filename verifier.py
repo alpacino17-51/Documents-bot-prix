@@ -129,10 +129,12 @@ def compute_verdict(price: float, original: Optional[float], displayed_disc: Opt
 
 def amazon_locale(deal: Deal) -> str:
     host = (deal.link_host or "").lower()
+    if host.endswith("amazon.co.uk"):
+        return "uk"
     for loc in ("fr", "de", "it", "es"):
         if host.endswith(f"amazon.{loc}"):
             return loc
-    return {"DE": "de", "IT": "it", "ES": "es"}.get(deal.site_country.upper(), "fr")
+    return {"DE": "de", "IT": "it", "ES": "es", "UK": "uk"}.get(deal.site_country.upper(), "fr")
 
 
 def source_host(deal: Deal) -> str:

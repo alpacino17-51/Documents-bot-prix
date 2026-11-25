@@ -24,6 +24,11 @@ def test_find_prices_in_sentence():
     assert prices == [(59.99, "EUR"), (349.99, "EUR")]
 
 
+def test_price_not_glued_to_reference():
+    assert find_prices("Robot KitchenAid Artisan 5KSM175 299,00 € 649,00 €") == [(299.0, "EUR"), (649.0, "EUR")]
+    assert find_prices("TV 1 299,99 €") == [(1299.99, "EUR")]
+
+
 def test_to_eur():
     assert to_eur(10, "GBP", {"GBP": 1.17}) == 11.7
     assert to_eur(None, "EUR", {"EUR": 1}) is None

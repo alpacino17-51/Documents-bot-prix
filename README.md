@@ -99,6 +99,22 @@ choisit un **moteur** réutilisable (`sources/catalog.py`).
 | `cards` | `sources/sneakers_generic.py` | kickz.com |
 | `jsonld` | `sources/sneakers_generic.py` | snipes, bstn, sivasdescalzo, endclothing — **désactivés** (produits chargés en JavaScript ou URL promo introuvable) |
 
+| `retailer` | `sources/retailer_generic.py` | enseignes directes FR/EU (LOT 3) : essaie JSON-LD → JSON embarqué (`__NEXT_DATA__`, `__INITIAL_STATE__`…) → Shopify → vignettes HTML, et ne garde que les produits remisés |
+
+Ajouter une enseigne = une entrée `{"id": ..., "engine": "retailer", "base_url": ..., "page_urls": [...]}`
+(+ `link_regex` : motif des liens produit, `category`, `min_price_eur`).
+
+**Enseignes LOT 3 actives** : Rue du Commerce, Materiel.net (reconditionné), PcComponentes (reconditionné), Joybuy
+(outlet, prix « nouveaux clients » exclus), Micromania, Carrefour (jouets), Auchan, About You, Alltricks,
+Snowleader, Alpiniste (outlet), Avenue des Jeux ; Amazon UK via CamelCamelCamel (`uk`, plafond 150 €).
+
+**Désactivées, avec la raison dans `config.json`** : Darty, Ubaldi, Intersport, King Jouet (DataDome) ;
+Cdiscount, Bike-Discount, Dyson (Cloudflare) ; Proshop (403) ; LDLC, Alternate, Cultura, YOOX, ASOS, i-Run,
+Ekosport, Blue Tomato, KitchenAid, Bose, E.Leclerc (produits chargés en JavaScript) ; TopAchat (prix « après code
+promo » non fiables) ; Coolshop (pas de réponse) ; MaxGaming, BIKE24, Smyths, JB Spielwaren, MDA, Glisshop (pas de
+page promo exploitable trouvée). Aucune protection anti-robot n'est contournée : une enseigne bloquée est
+simplement mise en pause. Beaucoup de ces enseignes restent couvertes indirectement par Idealo et Dealabs.
+
 Chaque site a son `enabled`, son `min_interval_minutes` et peut avoir son propre `min_displayed_discount_pct`.
 Les deals déclenchés sont vérifiés par ordre de priorité : sources communautaires d'abord, puis plus forte remise.
 

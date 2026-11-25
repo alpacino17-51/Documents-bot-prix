@@ -210,6 +210,9 @@ class Bot:
             if deal.published_at and now - deal.published_at > max_age:
                 continue
             ok, why = price_ok(deal, general)
+            min_price = float(self.source_cfgs.get(deal.origin, {}).get("min_price_eur", 0) or 0)
+            if ok and min_price and deal.price_eur is not None and deal.price_eur < min_price:
+                ok, why = False, f"prix < {min_price:g} € (minimum propre à {deal.origin})"
             if not ok:
                 log.debug("Ignoré (%s) : %s", why, deal.title[:80])
                 continue

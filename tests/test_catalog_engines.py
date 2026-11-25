@@ -155,6 +155,12 @@ def test_catalog_builds_sources_from_config(cfg):
             "asphaltgold", "overkillshop", "sneakersnstuff", "size_uk", "footshop", "kickz"} <= set(ids)
     disabled = {s.name for s in sources if not s.enabled}
     assert {"snipes", "bstn", "sivasdescalzo", "endclothing"} <= disabled
+    # LOT 3 : enseignes actives et enseignes bloquées (désactivées avec la raison)
+    enabled = {s.name for s in sources if s.enabled}
+    assert {"rueducommerce", "materielnet", "pccomponentes", "micromania", "carrefour", "auchan", "aboutyou",
+            "alltricks", "snowleader", "alpiniste", "avenuedesjeux", "joybuy"} <= enabled
+    assert {"darty", "cdiscount", "intersport", "dyson_outlet"} <= disabled
+    assert all(s.cfg.get("_note") for s in sources if s.name in ("darty", "cdiscount", "intersport"))
     assert next(s for s in sources if s.name == "tradeinn").min_interval_minutes == 15
 
 

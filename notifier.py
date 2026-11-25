@@ -61,8 +61,12 @@ def format_alert(alert: Alert, test: bool = False) -> str:
     if v.brand:
         lines.append(f"🏷 <b>Marque :</b> {e(v.brand)} ({e(BRAND_LABELS.get(v.brand_status, v.brand_status))})")
     lines.append(f"{flag} <b>Pays du site :</b> {e(d.site_country or '—')}")
-    if d.sizes:
-        lines.append(f"📏 <b>Tailles en stock :</b> {e(', '.join(d.sizes))}")
+    if d.sizes:                       # renseigné uniquement par les marques de trusted_dtc_brands
+        if d.sizes == ["Taille unique"]:
+            lines.append("📏 <b>Taille unique</b>")
+        else:
+            label = "Tailles dispo" if len(d.sizes) > 1 else "Taille dispo"
+            lines.append(f"📏 <b>{label} :</b> {e(', '.join(d.sizes))}")
 
     price = money(d.price, d.currency)
     if d.currency != "EUR" and d.price_eur is not None:

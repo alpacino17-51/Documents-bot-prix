@@ -135,7 +135,12 @@ Les deals déclenchés sont vérifiés par ordre de priorité : sources communau
     déjà vu) et prix ≥ 35 % sous la médiane relevée, au plus bas jamais vu ;
   - ℹ️ **Promo directe (historique en cours)** : historique insuffisant mais prix barré Shopify ≥ 50 % ;
   - rien si le prix n'a jamais bougé depuis le premier relevé.
-  Variantes épuisées ignorées, `wanted_sizes` pour filtrer les tailles, tailles en stock affichées dans l'alerte.
+  **Tailles** (uniquement pour ces marques) : `wanted_sizes` (défaut `["M", "L", "M/L"]`, `[]` = toutes ; ajouter
+  `"32"`, `"34"`… pour les pantalons) — un produit est gardé si AU MOINS UNE de ces tailles est en stock
+  (`available == true`), avec correspondance exacte (jamais « L » dans « XL »). `allow_one_size` (défaut `true`) laisse
+  passer les accessoires taille unique (`Default Title`, `One Size`, `OS`, `TU`… ou variantes sans taille, ex. couleurs
+  seules). Les deux réglages peuvent être surchargés par marque dans `brands`. L'alerte affiche « Tailles dispo : M, L »,
+  « Taille dispo : M » ou « Taille unique ». Le filtre ne touche jamais l'historique : tout le catalogue est enregistré.
   Une nouvelle baisse du même article redonne une alerte (la clé de dédoublonnage contient le prix).
 
 ## 3 bis. Vérification stricte anti « faux bons plans »

@@ -10,7 +10,7 @@ from main import Bot
 from models import VERDICT_DTC_INTRO, VERDICT_TRUE, Deal
 from notifier import format_alert
 from sources.courir import CourirSource, page_url, parse_listing
-from sources.dtc_shopify import DTCShopifySource, analyse_history, size_matches, variant_size
+from sources.dtc_shopify import DTCShopifySource, analyse_history, variant_size
 from sources.galerieslafayette import GaleriesLafayetteSource
 from verifier import Verifier
 
@@ -57,8 +57,6 @@ def test_history_rules():
 def test_sizes():
     assert variant_size({"title": "M", "option1": "M"}) == "M"
     assert variant_size({"title": "Default Title", "option1": "Default Title"}) == ""
-    assert size_matches("M", ["M", "L"]) and not size_matches("S", ["M", "L"])
-    assert size_matches("", ["M"]) and size_matches("XL", [])
 
 
 # ---------------------------------------------------------------- module dtc_shopify + pipeline
@@ -100,7 +98,7 @@ def test_davril_drop_from_119_95_to_47_98_is_verified_and_sent(cfg, tmp_path):
     assert alert.verification.label_override == "✅ Baisse vérifiée (historique local)"
     assert alert.deal.sizes == ["M", "L"]                                    # S épuisée
     text = format_alert(alert)
-    assert "Baisse vérifiée (historique local)" in text and "Tailles en stock :</b> M, L" in text
+    assert "Baisse vérifiée (historique local)" in text and "Tailles dispo :</b> M, L" in text
     assert "marque indépendante" in text                                    # pas de comparateur
     # historique complet : les 3 produits (épuisé et non soldé compris) sont enregistrés
     assert db.price_history("dtc:davril.com:9497507332425") and db.price_history("dtc:davril.com:9497507332426")

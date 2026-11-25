@@ -11,11 +11,13 @@ multi-marchands n'a pas de sens. Le verdict repose uniquement sur l'HISTORIQUE L
    - ℹ️ « Promo directe (historique en cours) » : historique encore insuffisant, mais `compare_at_price` affiche une
      baisse ≥ `intro_min_compare_at_pct` (50 %) ;
    - aucun signal si le prix n'a jamais bougé depuis le premier relevé (fausse promo permanente).
-Les variantes en rupture sont ignorées ; `wanted_sizes` restreint aux tailles voulues ; les tailles en stock sont
-affichées dans l'alerte.
+Filtre de tailles (alerte seulement, jamais l'historique) : `wanted_sizes` (ex. ["M", "L", "M/L"], [] = toutes),
+correspondance EXACTE sur la valeur de taille de chaque variante `available == True` ; `allow_one_size` laisse passer
+les accessoires en taille unique. Les tailles retenues sont affichées dans l'alerte.
 """
 from __future__ import annotations
 
+import re
 import statistics
 import time
 from typing import Optional
@@ -28,7 +30,13 @@ from sources.merchant_common import make_deal, sort_by_discount
 from sources.sneakers_generic import parse_cards
 
 DAY = 86400.0
-NO_SIZE = {"default title", "title", "taille unique", "one size", "os", "tu", "unique"}
+ONE_SIZE_VALUES = {"default title", "one size", "onesize", "one-size", "os", "tu", "t.u.", "taille unique",
+                   "unique", "u", "size unique", "einheitsgrösse", "einheitsgrosse"}
+SIZE_OPTION_NAMES = ("size", "taille", "taglia", "talla", "grösse", "grosse", "größe", "pointure", "waist")
+_LETTER_SIZE = r"(?:X{0,3}S|M|X{0,3}L|\d?XL|\d?XS)"
+# taille de vêtement standard (S, M, XL, 2XL, M/L, S-M...) ou chiffrée (32, 34/32, W32, 42.5, EU 42)
+_CLOTHING_RE = re.compile(rf"^{_LETTER_SIZE}(?:\s?[/-]\s?{_LETTER_SIZE})?$", re.I)
+_NUMERIC_RE = re.compile(r"^(?:W|EU\s?|FR\s?|US\s?|UK\s?)?\d{1,2}(?:[.,]5)?(?:\s?[/x]\s?(?:L)?\d{2})?$", re.I)
 
 
 def _f(v) -> Optional[float]:
@@ -38,19 +46,78 @@ def _f(v) -> Optional[float]:
         return None
 
 
-def variant_size(v: dict) -> str:
-    for key in ("option1", "option2", "option3", "title"):
-        val = (v.get(key) or "").strip()
-        if val and val.lower() not in NO_SIZE and "/" not in val:
-            return val
-    title = (v.get("title") or "").strip()
-    return "" if title.lower() in NO_SIZE else title.split("/")[0].strip()
+def normalize_size(value: str) -> str:
+    """« m / l » -> « M/L », « eu 42 » -> « EU 42 » : comparaison exacte, insensible à la casse et aux espaces."""
+    value = re.sub(r"\s*/\s*", "/", (value or "").strip())
+    return re.sub(r"\s+", " ", value).upper()
 
 
-def size_matches(size: str, wanted: list[str]) -> bool:
-    if not wanted or not size:
-        return True               # pas de filtre, ou article sans taille (accessoire, taille unique)
-    return size.strip().lower() in {w.strip().lower() for w in wanted}
+def is_size_value(value: str) -> bool:
+    v = normalize_size(value)
+    return bool(v) and (bool(_CLOTHING_RE.match(v)) or bool(_NUMERIC_RE.match(v)))
+
+
+def is_one_size_value(value: str) -> bool:
+    return (value or "").strip().lower() in ONE_SIZE_VALUES
+
+
+def variant_options(v: dict) -> list[str]:
+    """Valeurs d'options d'une variante : option1/2/3, sinon le titre découpé sur « / » ENTOURÉ d'espaces
+    (« Noir / M/L » -> ["Noir", "M/L"] : la taille double M/L n'est pas cassée)."""
+    values = [(v.get(k) or "").strip() for k in ("option1", "option2", "option3")]
+    values = [x for x in values if x]
+    if not values:
+        values = [x.strip() for x in (v.get("title") or "").split(" / ") if x.strip()]
+    return values
+
+
+def size_option_index(product: dict) -> Optional[int]:
+    """Position de l'option « Taille » d'après les noms d'options Shopify (Size, Taille, SIZE...)."""
+    for i, opt in enumerate(product.get("options") or []):
+        name = (opt.get("name") if isinstance(opt, dict) else str(opt)) or ""
+        if any(n in name.strip().lower() for n in SIZE_OPTION_NAMES):
+            return i
+    return None
+
+
+def variant_size(v: dict, size_index: Optional[int] = None) -> str:
+    """Taille normalisée d'une variante ('' si aucune taille de vêtement / pantalon / chaussure reconnue)."""
+    options = variant_options(v)
+    if size_index is not None and size_index < len(options) and is_size_value(options[size_index]):
+        return normalize_size(options[size_index])
+    for value in options:                     # pas d'option nommée : première valeur qui ressemble à une taille
+        if is_size_value(value):
+            return normalize_size(value)
+    return ""
+
+
+def is_one_size_product(product: dict) -> bool:
+    """Taille unique : une seule variante « Default Title / One Size / OS / TU / Taille unique / Unique / U »,
+    ou aucune variante ne porte de taille reconnaissable (ex. uniquement des couleurs)."""
+    variants = product.get("variants") or []
+    if not variants:
+        return False
+    if len(variants) == 1 and any(is_one_size_value(x) for x in variant_options(variants[0]) or ["Default Title"]):
+        return True
+    idx = size_option_index(product)
+    if all(any(is_one_size_value(x) for x in variant_options(v)) for v in variants):
+        return True
+    return not any(variant_size(v, idx) for v in variants)
+
+
+def select_variants(product: dict, wanted: list[str], allow_one_size: bool) -> tuple[list[dict], list[str]]:
+    """Variantes EN STOCK (available == True) retenues pour l'alerte, et libellés de tailles à afficher.
+    Liste vide = produit ignoré pour l'alerte (aucune taille voulue en stock, ou taille unique refusée)."""
+    available = [v for v in product.get("variants") or [] if v.get("available") is True]
+    if not available:
+        return [], []
+    if is_one_size_product(product):
+        return (available, ["Taille unique"]) if allow_one_size else ([], [])
+    idx = size_option_index(product)
+    wanted_norm = {normalize_size(w) for w in wanted if str(w).strip()}
+    matched = [v for v in available if variant_size(v, idx) and (not wanted_norm or variant_size(v, idx) in wanted_norm)]
+    labels = sorted({variant_size(v, idx) for v in matched}, key=_size_order)
+    return matched, labels
 
 
 def analyse_history(previous: list[tuple[float, float]], current: float, compare_at: Optional[float],
@@ -136,7 +203,6 @@ class DTCShopifySource(BaseSource):
 
     def fetch(self) -> list[Deal]:
         now = time.time()
-        wanted = list(self.cfg.get("wanted_sizes", []))
         out: list[Deal] = []
         for brand in self.cfg.get("brands", []):
             if brand.get("enabled", True) is False:
@@ -156,6 +222,8 @@ class DTCShopifySource(BaseSource):
                     if self.db is not None and d.price:
                         self.db.add_price_observation(key, d.price, source, ts=now)
                 continue
+            wanted = list(brand.get("wanted_sizes", self.cfg.get("wanted_sizes", [])))
+            allow_one_size = bool(brand.get("allow_one_size", self.cfg.get("allow_one_size", True)))
             for p in products:
                 pid = p.get("id")
                 variants = p.get("variants") or []
@@ -163,18 +231,19 @@ class DTCShopifySource(BaseSource):
                 if not pid or not all_prices:
                     continue
                 key = f"dtc:{domain}:{pid}"
-                in_stock = [v for v in variants if v.get("available") and size_matches(variant_size(v), wanted)]
+                # le filtre de tailles ne s'applique qu'à l'alerte : l'historique est calculé sur le catalogue entier
+                matched, sizes = select_variants(p, wanted, allow_one_size)
                 decision = None
-                if in_stock:
-                    current = min(_f(v.get("price")) for v in in_stock if _f(v.get("price")))
-                    compare_at = max((_f(v.get("compare_at_price")) or 0) for v in in_stock) or None
+                prices = [x for x in (_f(v.get("price")) for v in matched) if x]
+                if prices:
+                    current = min(prices)
+                    compare_at = max((_f(v.get("compare_at_price")) or 0) for v in matched) or None
                     decision = self._decide(key, current, compare_at, now)
-                # historique complet : TOUS les produits, soldés ou non, en stock ou non
+                # historique complet : TOUS les produits, soldés ou non, en stock ou non, toutes tailles
                 if self.db is not None:
                     self.db.add_price_observation(key, min(all_prices), source, ts=now)
                 if not decision:
                     continue
-                sizes = sorted({variant_size(v) for v in in_stock if variant_size(v)}, key=_size_order)
                 original = decision.get("reference") if decision["kind"] == "verified" else decision.get("compare_at")
                 d = make_deal(source, name, p.get("title", ""), f"{base}/products/{p.get('handle', '')}", current,
                               original, source_id=f"{pid}@{current:.2f}", category="Mode",
